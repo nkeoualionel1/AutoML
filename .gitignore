@@ -55,3 +55,6 @@ data/
 corpus/
 logs/
 results/
+
+# Jeux de test générés par script/generer_datasets_test.py (fichiers > 5 Mo)
+dataset_test/
