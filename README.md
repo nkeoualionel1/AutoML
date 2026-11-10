@@ -105,13 +105,50 @@ Une copie locale est aussi disponible dans [dataset/](dataset/). Chaque jeu cont
 4. Combinaison de modèles (blending / stacking)
 5. Évaluation par validation croisée et métriques adaptées
 
+### 6. Étape 1 de la pipeline : inspection et détection
+
+- [automl/data.py](automl/data.py) : chargement d'un dossier `<nom>.data` / `.type` / `.solution` (dense avec valeurs manquantes, ou creux `indice:valeur`). La largeur des matrices creuses est fixée par le fichier `.type`, pour que le jeu de test ait toujours le même nombre de colonnes que le train. Découpage train / valid / test (70 / 15 / 15), stratifié en classification.
+- [automl/inspection.py](automl/inspection.py) :
+  - `detect_task(y)` reconnaît la tâche : `binary`, `multiclass`, `multiclass_onehot`, `multilabel`, `regression`, `multioutput_regression`. L'objet `TaskInfo` renvoyé convertit y vers le format scikit-learn (`encode_y`), puis les prédictions vers le format `.solution` (`decode_y`, qui reconstruit le one-hot).
+  - `inspect_data(X, types, y)` renvoie un `DataProfile` : colonnes numériques, catégorielles, binaires et constantes, taux de valeurs manquantes, cardinalité des catégorielles, variables asymétriques, densité, données de comptage creuses, répartition des classes et déséquilibre, asymétrie de la cible.
+  - Le profil est calculé **sur le train uniquement**, pour éviter les fuites de données.
+
+### 7. Étape 2 de la pipeline : prétraitement et feature engineering
+
+[automl/preprocessing.py](automl/preprocessing.py) : `build_preprocessor(profile)` construit une pipeline scikit-learn adaptée au profil. Elle est ajustée sur le train, puis appliquée au valid et au test.
+
+| Type de colonne                 | Traitement                                                                              |
+|---------------------------------|-----------------------------------------------------------------------------------------|
+| Numérique                       | imputation par la médiane (+ indicateur de manquant) puis `StandardScaler`              |
+| Numérique asymétrique (≥ 0)     | imputation, `log1p`, puis `StandardScaler`                                              |
+| Catégorielle                    | imputation par le mode, puis one-hot (20 modalités max, modalités rares regroupées)     |
+| Binaire                         | imputation par le mode, puis `MinMaxScaler`                                             |
+| Constante                       | supprimée                                                                               |
+| Creux, données de comptage      | suppression des colonnes vides puis TF-IDF (la matrice reste creuse)                    |
+| Creux, autres données           | suppression des colonnes vides puis `MaxAbsScaler`                                      |
+| Dense très large (> 5 000 var.) | sélection des meilleures variables (`SelectKBest`)                                      |
+
+Résultat sur les 6 jeux (partie train) :
+
+| Jeu      | Tâche détectée           | Variables avant | Variables après | Remarques                                       |
+|----------|--------------------------|----------------:|----------------:|-------------------------------------------------|
+| `data_A` | multilabel (3)           |              24 |             173 | 6 colonnes avec manquants, labels déséquilibrés |
+| `data_B` | regression               |              16 |              16 | 8 variables asymétriques passées en log         |
+| `data_C` | multiclass_onehot (10)   |           1 568 |           1 568 | 4 colonnes binaires                             |
+| `data_D` | binary                   |             144 |             143 | 1 colonne constante supprimée                   |
+| `data_E` | binary                   |             259 |             259 | classes équilibrées                             |
+| `data_F` | multiclass_onehot (20)   |          61 188 |          53 580 | creux, TF-IDF, 7 608 colonnes vides retirées    |
+
+`automl.fit(...)` enchaîne maintenant ces deux étapes et garde les jeux train / valid / test prétraités dans `self.splits`, prêts pour l'étape 3.
+Les paramètres globaux (graine aléatoire, `AUTOML_TIME_BUDGET`, `AUTOML_N_JOBS`, `AUTOML_N_TRIALS`) sont dans [automl/config.py](automl/config.py).
+
 ---
 
 ## Prochaines étapes
 
-- [ ] Transférer la détection de tâche et le chargement des données dans le package `automl/`
-- [ ] Implémenter réellement `fit`, `eval` et `predict` (avec sortie one-hot quand nécessaire)
-- [ ] Ajouter le prétraitement (gestion des variables catégorielles de `data_A`, données creuses de `data_F`)
+- [x] Transférer la détection de tâche et le chargement des données dans le package `automl/`
+- [x] Ajouter le prétraitement (gestion des variables catégorielles de `data_A`, données creuses de `data_F`)
+- [ ] Implémenter le modèle dans `fit`, puis `eval` et `predict` (avec sortie one-hot quand nécessaire)
 - [ ] Comparer plusieurs modèles et optimiser leurs hyperparamètres
 - [ ] Évaluer en validation croisée sur les 6 jeux et battre les scores de la baseline
 - [ ] Préparer le poster et la soutenance
