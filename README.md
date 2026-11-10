@@ -105,11 +105,17 @@ Une copie locale est aussi disponible dans [dataset/](dataset/). Chaque jeu cont
 4. Combinaison de modèles (blending / stacking)
 5. Évaluation par validation croisée et métriques adaptées
 
+### 6. Socle Ressources & Données (Étape 1) – [notebooks/03_etape1_donnees_et_taches.ipynb](notebooks/03_etape1_donnees_et_taches.ipynb)
+
+- [automl/config.py](automl/config.py) : lecture sécurisée de `AUTOML_TIME_BUDGET`, `AUTOML_N_JOBS` (protection contre `-1`), `AUTOML_N_TRIALS`, graine déterministe et chrono `ChronoBudget`.
+- [automl/data.py](automl/data.py) : chargement universel dense/creux, détection automatique des 6 tâches, découpage stratifié adaptatif selon $N$, et formatage strict des prédictions (One-Hot, 1D, multi-label).
+- [JOURNAL_SOUTENANCE.md](JOURNAL_SOUTENANCE.md) : journal détaillé du projet (ce qui a été fait, pourquoi, chiffres clés et réponses jury).
+
 ---
 
 ## Prochaines étapes
 
-- [ ] Transférer la détection de tâche et le chargement des données dans le package `automl/`
+- [x] Transférer la détection de tâche et le chargement des données dans le package `automl/`
 - [ ] Implémenter réellement `fit`, `eval` et `predict` (avec sortie one-hot quand nécessaire)
 - [ ] Ajouter le prétraitement (gestion des variables catégorielles de `data_A`, données creuses de `data_F`)
 - [ ] Comparer plusieurs modèles et optimiser leurs hyperparamètres
