@@ -40,28 +40,63 @@ class TaskInfo:
         return self.task in CLASSIFICATION_TASKS
 
     def encode_y(self, y: np.ndarray) -> np.ndarray:
-        """Format de la solution -> format attendu par scikit-learn."""
+        """Format de la solution -> format attendu par scikit-learn.
+
+        Binaire / multiclasse : étiquettes -> indices 0..k-1 (marche aussi pour du texte).
+        """
+        y = np.asarray(y)
         if self.task == MULTICLASS_ONEHOT:
             return np.argmax(y, axis=1)
         if self.task == MULTILABEL:
             return y.astype(int)
         if self.task in (BINARY, MULTICLASS):
-            return y.ravel()
-        return y.ravel() if self.n_outputs == 1 else y
+            return np.searchsorted(self.classes, y.ravel()).astype(int)
+        return y.astype(np.float64).ravel() if self.n_outputs == 1 else y.astype(np.float64)
 
     def decode_y(self, y_pred: np.ndarray) -> np.ndarray:
-        """Prédictions scikit-learn -> même forme que le fichier .solution."""
+        """Prédictions scikit-learn -> même forme et mêmes valeurs que le fichier .solution."""
         y_pred = np.asarray(y_pred)
         if self.task == MULTICLASS_ONEHOT:
-            onehot = np.zeros((len(y_pred), self.n_outputs), dtype=int)
-            onehot[np.arange(len(y_pred)), y_pred.astype(int)] = 1
+            idx = np.clip(y_pred.astype(int).ravel(), 0, self.n_outputs - 1)
+            onehot = np.zeros((len(idx), self.n_outputs), dtype=int)
+            onehot[np.arange(len(idx)), idx] = 1  # chaque ligne somme exactement à 1
             return onehot
+        if self.task in (BINARY, MULTICLASS):
+            idx = np.clip(y_pred.astype(int).ravel(), 0, len(self.classes) - 1)
+            return self.classes[idx]
+        if self.task == MULTILABEL:
+            return (y_pred >= 0.5).astype(int) if y_pred.dtype.kind == "f" else y_pred.astype(int)
         return y_pred
+
+    def stratify_labels(self, y_enc: np.ndarray) -> Optional[np.ndarray]:
+        """Vecteur 1-D pour stratifier le découpage, ou None si impossible.
+
+        - classification : la classe ;
+        - multi-label : la combinaison de labels codée en entier (ex. [1,0,1] -> 5) ;
+        - régression : le décile de la cible.
+        Une modalité trop rare (< 3 exemples) rend la stratification impossible.
+        """
+        if self.task in (BINARY, MULTICLASS, MULTICLASS_ONEHOT):
+            labels = y_enc.ravel()
+        elif self.task == MULTILABEL and y_enc.shape[1] <= 10:
+            labels = y_enc @ (1 << np.arange(y_enc.shape[1]))
+        elif self.task == REGRESSION:
+            edges = np.quantile(y_enc, np.linspace(0, 1, 11)[1:-1])
+            labels = np.searchsorted(edges, y_enc)
+        else:
+            return None
+        _, counts = np.unique(labels, return_counts=True)
+        return labels if counts.min() >= 3 else None
 
 
 def detect_task(y: np.ndarray) -> TaskInfo:
     """Déduit la tâche uniquement à partir de la forme et des valeurs de y."""
-    y = np.asarray(y, dtype=np.float64)
+    try:
+        y = np.asarray(y, dtype=np.float64)
+    except ValueError:
+        # Étiquettes texte ("chat", "chien") : forcément une classification
+        classes = np.unique(np.asarray(y).ravel())
+        return TaskInfo(BINARY if len(classes) == 2 else MULTICLASS, 1, classes)
     if y.ndim == 2 and y.shape[1] == 1:
         y = y.ravel()
 
@@ -181,7 +216,7 @@ def _profile_sparse(X: sp.csr_matrix, profile: DataProfile) -> None:
 def _profile_target(y: np.ndarray, profile: DataProfile) -> None:
     task = detect_task(y)
     profile.task = task
-    y_enc = task.encode_y(np.asarray(y, dtype=np.float64))
+    y_enc = task.encode_y(y)
 
     if task.task in (BINARY, MULTICLASS, MULTICLASS_ONEHOT):
         values, counts = np.unique(y_enc, return_counts=True)
