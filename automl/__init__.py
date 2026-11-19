@@ -1,9 +1,17 @@
-import numpy as np
+import os as _os
 
-from .config import RANDOM_STATE
-from .data import load_dataset, split_data
-from .inspection import MULTILABEL, DataProfile, TaskInfo, detect_task, inspect_data
-from .preprocessing import build_preprocessor
+# Doit passer avant l'import de numpy / scikit-learn : leurs pools de threads
+# natifs (OpenMP, BLAS) lisent ces variables à l'initialisation.
+if _os.environ.get("AUTOML_N_JOBS", "").strip().isdigit():
+    for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        _os.environ.setdefault(_var, str(max(1, int(_os.environ["AUTOML_N_JOBS"]))))
+
+import numpy as np  # noqa: E402
+
+from .config import ResourceConfig, TimeBudget, limit_native_threads, set_seed  # noqa: E402
+from .data import load_dataset, split_data  # noqa: E402
+from .inspection import DataProfile, TaskInfo, detect_task, inspect_data  # noqa: E402
+from .preprocessing import build_preprocessor  # noqa: E402
 
 
 class AutoML:
@@ -15,16 +23,22 @@ class AutoML:
         self.profile = None
         self.preprocessor = None
         self.splits = None
+        self.config = None
+        self.feature_meta = None
 
     def fit(self, data_dest: str) -> "AutoML":
         print(f"[AutoML] Entraînement sur {data_dest}...")
-        np.random.seed(RANDOM_STATE)
+        # Ressources lues à chaque fit (l'évaluateur peut les changer entre deux appels)
+        self.config = ResourceConfig.from_env()
+        limit_native_threads(self.config.n_jobs)
+        set_seed()
+        self.timer = TimeBudget(self.config.time_budget)
         ds = load_dataset(data_dest)
+        self.feature_meta = ds.meta  # pour relire le test exactement comme le train
 
         # Étape 1 : inspection et détection de la tâche
         self.task = detect_task(ds.y)
-        labels = self.task.encode_y(ds.y)
-        stratify = labels if self.task.is_classification and self.task.task != MULTILABEL else None
+        stratify = self.task.stratify_labels(self.task.encode_y(ds.y))
         X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(ds.X, ds.y, stratify)
 
         # Le profil est calculé sur le train seulement (pas de fuite de données)
