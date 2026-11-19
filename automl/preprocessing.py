@@ -33,6 +33,21 @@ from .inspection import (
 MAX_DENSE_FEATURES = 5000
 
 
+def _inf_to_nan(X):
+    # +/-inf ferait planter StandardScaler : on le traite comme une valeur manquante
+    X = np.array(X, dtype=np.float64)
+    X[np.isinf(X)] = np.nan
+    return X
+
+
+def _clip_negative(X):
+    # Données de comptage au train : une valeur négative au test rendrait log(tf) indéfini
+    X = X.tocsr(copy=True)
+    X.data = np.maximum(np.nan_to_num(X.data, nan=0.0, posinf=0.0, neginf=0.0), 0.0)
+    X.eliminate_zeros()
+    return X
+
+
 def _log1p_positive(X):
     # Les valeurs imputées restent >= 0, mais on protège quand même le log
     return np.log1p(np.clip(X, 0, None))
@@ -92,6 +107,7 @@ def _sparse_preprocessor(profile: DataProfile) -> Pipeline:
     steps = [("drop_constant", VarianceThreshold(0.0))]
     if profile.nonnegative_integer:
         # Données de comptage (type sac de mots) : pondération TF-IDF, reste creux
+        steps.append(("clip", FunctionTransformer(_clip_negative, accept_sparse=True)))
         steps.append(("tfidf", TfidfTransformer(sublinear_tf=True)))
     else:
         # MaxAbsScaler conserve les zéros, donc la matrice reste creuse
@@ -104,7 +120,11 @@ def build_preprocessor(profile: DataProfile, max_features: Optional[int] = None)
     if profile.is_sparse:
         steps = [("prep", _sparse_preprocessor(profile))]
     else:
-        steps = [("prep", _dense_preprocessor(profile)), ("drop_constant", VarianceThreshold(0.0))]
+        steps = [
+            ("inf", FunctionTransformer(_inf_to_nan)),
+            ("prep", _dense_preprocessor(profile)),
+            ("drop_constant", VarianceThreshold(0.0)),
+        ]
 
     # Sélection de variables (filtre univarié) pour les jeux denses très larges.
     # Elle n'est possible qu'avec une cible 1-D (pas en multi-label).
