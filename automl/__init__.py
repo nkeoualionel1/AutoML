@@ -14,7 +14,7 @@ import scipy.sparse as sp  # noqa: E402
 from .config import ResourceConfig, TimeBudget, limit_native_threads, set_seed  # noqa: E402
 from .data import load_dataset, split_data  # noqa: E402
 from .inspection import DataProfile, TaskInfo, detect_task, inspect_data  # noqa: E402
-from .metrics import all_metrics, primary_score  # noqa: E402
+from .metrics import all_metrics  # noqa: E402
 from .models import get_candidates  # noqa: E402
 from .preprocessing import build_preprocessor  # noqa: E402
 
@@ -35,7 +35,7 @@ class AutoML:
         self.splits = None
         self.config = None
         self.feature_meta = None
-        self.leaderboard = []  # (nom du modèle, score validation, durée d'entraînement)
+        self.leaderboard = []  # un dict par modèle essayé : nom, durée et métriques brutes de validation
         self.metrics = {}
 
     def fit(self, data_dest: str) -> "AutoML":
@@ -93,13 +93,14 @@ class AutoML:
             start = time.perf_counter()
             try:
                 model = cand.build().fit(Xt_train, y_train)
-                score = primary_score(task, y_valid, model.predict(Xt_valid))
+                valid_metrics = all_metrics(task, y_valid, model.predict(Xt_valid))
+                score = valid_metrics["score"]
             except Exception as exc:  # un modèle qui échoue ne doit pas arrêter fit()
                 print(f"[AutoML] {cand.name} a échoué : {exc}")
                 continue
             duration = time.perf_counter() - start
             slowest = max(slowest, duration)
-            self.leaderboard.append((cand.name, score, duration))
+            self.leaderboard.append({"modèle": cand.name, "durée (s)": duration, **valid_metrics})
             print(f"[AutoML]   {cand.name:24s} score valid = {score:.4f} ({duration:.1f}s)")
             if best is None or score > best[0]:
                 best = (score, cand.name, model, duration, cand)
