@@ -144,7 +144,7 @@ Contrairement aux tests unitaires qui peuvent afficher des exemples sur un ou de
 ### Phase 4 — Premiers modèles et contrat (branche `feat/etape3-premiers-modeles`, par Zakaria, 19/11/2026)
 - **Ce qu'on a fait :** `models.py` (candidats par tâche et format, du moins cher au plus cher), `metrics.py` (score principal par tâche), sélection sur la validation sous budget temps, réentraînement sur train + valid, `eval()` et `predict()` fonctionnels, 8 tests du contrat.
 - **Pourquoi :** sans modèle, `eval()` et `predict()` ne renvoyaient rien : le contrat du sujet n'était pas rempli.
-- **Résultat clé pour la soutenance :** sur `data_C`, HistGradientBoosting dépassait le budget (71 s pour 60 s) ; la forêt aléatoire obtient le même score en 12 s. D'où l'ordre « du moins cher au plus cher » avec estimation du temps.
+- **Résultat clé pour la soutenance :** sur `data_C`, HistGradientBoosting met 51 s à s'entraîner, contre 12 s pour la forêt aléatoire, pour le même score (0,9515 contre 0,9514). D'où l'ordre « du moins cher au plus cher » avec estimation du temps : quel que soit le budget fixé par l'évaluateur (`AUTOML_TIME_BUDGET`), on ne lance un modèle coûteux que s'il a le temps de finir.
 - **Détails et suite pour l'équipe :** [`docs/ETAPE3_PREMIERS_MODELES.md`](docs/ETAPE3_PREMIERS_MODELES.md).
 
 ---

@@ -39,9 +39,9 @@ chargement → détection de tâche → découpage → prétraitement   (étapes
 - **Pourquoi du moins cher au plus cher ?** Le premier modèle est toujours entraîné, quel que soit le
   budget. Il doit donc être rapide. Ensuite, avant chaque modèle, on estime son coût à **4× le plus
   lent déjà vu** et on le saute s'il ne tient pas dans le temps restant.
-  Exemple réel sur `data_C` : HistGradientBoosting prenait 51 s (budget dépassé : 71 s au total pour
-  60 s autorisées) ; la forêt aléatoire fait le même score (0,9514 contre 0,9515) en 12 s.
-  Avec le nouvel ordre, `fit` prend 32 s.
+  Exemple réel sur `data_C` : HistGradientBoosting met 51 s à s'entraîner ; la forêt aléatoire fait
+  le même score (0,9514 contre 0,9515) en 12 s. Avec un petit budget, le boosting est donc sauté
+  sans perte de score ; avec un grand budget, il est essayé normalement.
 
 ### `automl/metrics.py` — comment on note un modèle
 
@@ -60,7 +60,10 @@ Le dossier de test est relu **avec les informations du train** (`FeatureMeta` : 
 codage du texte, même décalage creux), passe dans le même préprocesseur, puis `decode_y` remet les
 prédictions au format du `.solution` (étiquettes d'origine, one-hot qui somme à 1, etc.).
 
-## Résultats (budget 60 s, 4 cœurs)
+## Résultats (mesures de test, 4 cœurs)
+
+Ces mesures ont été faites avec un petit budget pour tester vite. Le budget réel est fixé par
+l'évaluateur via `AUTOML_TIME_BUDGET` (600 s par défaut si la variable est absente) ; le code s'y adapte.
 
 | Jeu | Tâche | Modèle retenu | Score valid | Score test interne | Durée `fit` |
 | :--- | :--- | :--- | :---: | :---: | :---: |
