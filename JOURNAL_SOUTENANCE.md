@@ -15,7 +15,7 @@
 | **Phase 2 : Baseline V1 (Prototype)** | Terminé | Équipe | `02_baseline_automl.ipynb` | Valider la faisabilité sur un sous-échantillon ($1\,000$ lignes) |
 | **Phase 3 : Inspection & Prétraitement (Étapes 1-2)** | Fusionné (PR #5, #6) | Lionel | `inspection.py`, `preprocessing.py` | Détecter la tâche, profiler les données, imputer / encoder / normaliser |
 | **Phase 3 bis : Socle Config & Données robuste** | Intégré dans `feat/etape1-2-robustesse` | Zakaria | `config.py`, `data.py` | Budget temps, chargement robuste, split adaptatif, contrat de sortie |
-| **Phase 4 : Premiers modèles & contrat (Étape 3)** | À faire | — | `automl/models.py`, `automl/metrics.py` | Faire fonctionner `fit` / `eval` / `predict` de bout en bout |
+| **Phase 4 : Premiers modèles & contrat (Étape 3)** | Branche `feat/etape3-premiers-modeles` | Zakaria | `automl/models.py`, `automl/metrics.py` | Faire fonctionner `fit` / `eval` / `predict` de bout en bout |
 | **Phase 5 : HPO Optuna sous budget temps** | À faire | — | `automl/models.py` | Optimiser les hyperparamètres sans dépasser `AUTOML_TIME_BUDGET` |
 | **Phase 6 : Ensembling & Interface Finale (Étape 4)** | À faire | — | `automl/ensemble.py`, `automl/__init__.py` | Combiner les meilleurs modèles |
 
@@ -138,6 +138,14 @@ Contrairement aux tests unitaires qui peuvent afficher des exemples sur un ou de
 - **Détails pour l'équipe :** [`docs/ETAPES_1_2_ROBUSTESSE.md`](docs/ETAPES_1_2_ROBUSTESSE.md).
 
 > Note : la section « Phase 3 — Socle Ressources & Données » plus haut décrit ma branche d'origine (noms en français : `ChronoBudget`, `MetaFeatures`…). Dans le code fusionné, ces éléments s'appellent `TimeBudget`, `FeatureMeta`, `adaptive_split_sizes`, pour rester cohérents avec le code de Lionel.
+
+---
+
+### Phase 4 — Premiers modèles et contrat (branche `feat/etape3-premiers-modeles`, par Zakaria, 19/11/2026)
+- **Ce qu'on a fait :** `models.py` (candidats par tâche et format, du moins cher au plus cher), `metrics.py` (score principal par tâche), sélection sur la validation sous budget temps, réentraînement sur train + valid, `eval()` et `predict()` fonctionnels, 8 tests du contrat.
+- **Pourquoi :** sans modèle, `eval()` et `predict()` ne renvoyaient rien : le contrat du sujet n'était pas rempli.
+- **Résultat clé pour la soutenance :** sur `data_C`, HistGradientBoosting dépassait le budget (71 s pour 60 s) ; la forêt aléatoire obtient le même score en 12 s. D'où l'ordre « du moins cher au plus cher » avec estimation du temps.
+- **Détails et suite pour l'équipe :** [`docs/ETAPE3_PREMIERS_MODELES.md`](docs/ETAPE3_PREMIERS_MODELES.md).
 
 ---
 
