@@ -14,7 +14,7 @@
 | **Phase 1 : Exploration (EDA)** | Terminé | Équipe | `01_exploration_donnees.ipynb` | Comprendre la diversité des formats (dense, creux 61k cols) et cibles |
 | **Phase 2 : Baseline V1 (Prototype)** | Terminé | Équipe | `02_baseline_automl.ipynb` | Valider la faisabilité sur un sous-échantillon ($1\,000$ lignes) |
 | **Phase 3 : Inspection & Prétraitement (Étapes 1-2)** | Fusionné (PR #5, #6) | Lionel | `inspection.py`, `preprocessing.py` | Détecter la tâche, profiler les données, imputer / encoder / normaliser |
-| **Phase 3 bis : Socle Config & Données robuste** | Branche `feat/etape1-data-config`, intégré par la PR « étapes 1-2 robustesse » | Zakaria | `config.py`, `data.py` | Budget temps, chargement robuste, split adaptatif, contrat de sortie |
+| **Phase 3 bis : Socle Config & Données robuste** | Intégré dans `feat/etape1-2-robustesse` | Zakaria | `config.py`, `data.py` | Budget temps, chargement robuste, split adaptatif, contrat de sortie |
 | **Phase 4 : Premiers modèles & contrat (Étape 3)** | À faire | — | `automl/models.py`, `automl/metrics.py` | Faire fonctionner `fit` / `eval` / `predict` de bout en bout |
 | **Phase 5 : HPO Optuna sous budget temps** | À faire | — | `automl/models.py` | Optimiser les hyperparamètres sans dépasser `AUTOML_TIME_BUDGET` |
 | **Phase 6 : Ensembling & Interface Finale (Étape 4)** | À faire | — | `automl/ensemble.py`, `automl/__init__.py` | Combiner les meilleurs modèles |
@@ -129,6 +129,15 @@ Lors de l'évaluation automatique, il y a **deux appels séparés dans le temps*
 
 ##### C. Généricité complète du contrat de sortie (`formater_predictions`)
 Contrairement aux tests unitaires qui peuvent afficher des exemples sur un ou deux datasets (comme `data_C` pour illustrer le One-Hot et `data_D` pour le binaire), la fonction `formater_predictions(preds, target_meta)` est **100 % agnostique du nom du dataset**. Elle s'appuie uniquement sur `MetaCible` (inféré dynamiquement) pour restituer la forme exacte attendue par `.solution` : matrice One-Hot stricte (somme par ligne = 1), matrice binaire multi-label, vecteur 1D dans les types d'origine (`int64`, `float64`, `str`) ou matrice continue multi-sorties.
+
+---
+
+### Phase 3 bis — Robustesse des étapes 1-2 (branche `feat/etape1-2-robustesse`, par Zakaria, 19/11/2026)
+- **Ce qu'on a fait :** intégration de ma branche `feat/etape1-data-config` dans le code de Lionel (sans dupliquer la détection de tâche), chargement robuste aux pièges du test, découpage adaptatif et stratifié (multi-label, régression), limite des threads à `AUTOML_N_JOBS`, 15 tests pytest.
+- **Pourquoi :** un plantage sur un jeu secret vaut 0 point ; et HistGradientBoosting utilisait tous les cœurs malgré la règle.
+- **Détails pour l'équipe :** [`docs/ETAPES_1_2_ROBUSTESSE.md`](docs/ETAPES_1_2_ROBUSTESSE.md).
+
+> Note : la section « Phase 3 — Socle Ressources & Données » plus haut décrit ma branche d'origine (noms en français : `ChronoBudget`, `MetaFeatures`…). Dans le code fusionné, ces éléments s'appellent `TimeBudget`, `FeatureMeta`, `adaptive_split_sizes`, pour rester cohérents avec le code de Lionel.
 
 ---
 
