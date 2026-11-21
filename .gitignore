@@ -56,5 +56,12 @@ corpus/
 logs/
 results/
 
-# Jeux de test générés par script/generer_datasets_test.py (fichiers > 5 Mo)
-dataset_test/
+# Jeux de test générés par scripts/generate_test_datasets.py (fichiers > 5 Mo)
+test_datasets/
+
+# Environnement virtuel local (propre à chaque machine)
+automl_env/
+
+# Données du challenge : sur Skinner (/info/corpus/ChallengeMachineLearning),
+# trop lourdes pour le dépôt (data_C.data = 65 Mo, limite du sujet = 5 Mo)
+dataset/

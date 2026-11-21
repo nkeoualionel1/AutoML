@@ -15,8 +15,13 @@ from .config import ResourceConfig, TimeBudget, limit_native_threads, set_seed  
 from .data import load_dataset, split_data  # noqa: E402
 from .inspection import DataProfile, TaskInfo, detect_task, inspect_data  # noqa: E402
 from .metrics import all_metrics  # noqa: E402
-from .models import get_candidates  # noqa: E402
+from .models import data_shape, get_candidates, rows_within  # noqa: E402
 from .preprocessing import build_preprocessor  # noqa: E402
+
+# Répartition du budget temps : le reste couvre chargement, prétraitement et marge
+MODEL_SHARE = 0.50   # coût estimé total des modèles essayés
+REFIT_SHARE = 0.75   # coût estimé total, réentraînement final sur train + valid compris
+MIN_ROWS = 500       # en dessous, un modèle n'est pas essayé (sauf le premier)
 
 
 def _stack(a, b):
@@ -25,7 +30,7 @@ def _stack(a, b):
 
 
 class AutoML:
-    """Pipeline AutoML : inspection -> prétraitement -> (modèles à venir)."""
+    """Pipeline AutoML : inspection -> prétraitement -> choix du modèle sous budget temps."""
 
     def __init__(self):
         self.model = None
@@ -35,11 +40,21 @@ class AutoML:
         self.splits = None
         self.config = None
         self.feature_meta = None
-        self.leaderboard = []  # un dict par modèle essayé : nom, durée et métriques brutes de validation
+        self.leaderboard = []  # un dict par modèle essayé : model, rows, estimated_s, duration_s + métriques de validation
         self.metrics = {}
 
     def fit(self, data_dest: str) -> "AutoML":
         print(f"[AutoML] Entraînement sur {data_dest}...")
+        self.prepare(data_dest)
+        # Étape 3 : choix du modèle sur la validation, puis réentraînement sur train + valid
+        self._select_model()
+        return self
+
+    def prepare(self, data_dest: str) -> "AutoML":
+        """Étapes 1 et 2 seules : chargement, inspection, découpage, prétraitement.
+
+        Utile pour tester le prétraitement sans entraîner de modèle.
+        """
         # Ressources lues à chaque fit (l'évaluateur peut les changer entre deux appels)
         self.config = ResourceConfig.from_env()
         limit_native_threads(self.config.n_jobs)
@@ -68,55 +83,76 @@ class AutoML:
             "test": (self.preprocessor.transform(X_test), y_test),
         }
         print(f"[AutoML] Après prétraitement : {Xt_train.shape[1]} variables")
-
-        # Étape 3 : choix du modèle sur la validation, puis réentraînement sur train + valid
-        self._select_model()
         return self
 
     def _select_model(self) -> None:
-        """Essaie chaque candidat tant que le budget temps le permet, garde le meilleur."""
+        """Entraîne les candidats selon un plan fixé à l'avance, garde le meilleur.
+
+        Le plan (quels modèles, sur combien de lignes) est calculé à partir des
+        coûts estimés, qui ne dépendent que de la taille des données et du budget :
+        deux exécutions font donc exactement les mêmes choix (reproductibilité).
+        L'horloge ne sert que de filet de sécurité si la machine est bien plus
+        lente que prévu.
+        """
         Xt_train, y_train = self.splits["train"]
         Xt_valid, y_valid = self.splits["valid"]
         Xt_test, y_test = self.splits["test"]
         task = self.task.task
-        best = None  # (score, nom, modèle, durée, candidat)
+        n_train = Xt_train.shape[0]
+        shape = data_shape(Xt_train, self.task, self.config.n_jobs)
+        budget = self.config.time_budget
+        best = None  # (score, nom, modèle, lignes utilisées, candidat)
         self.leaderboard = []
 
-        slowest = 0.0  # durée du modèle le plus lent entraîné jusqu'ici
+        planned = 0.0  # somme des coûts estimés des modèles déjà lancés
         for cand in get_candidates(self.profile, self.config.n_jobs):
-            # Toujours au moins un modèle. Ensuite, les candidats sont de plus en plus
-            # coûteux : on estime le suivant à 4x le plus lent déjà vu (prudent) et on
-            # ne le lance que s'il tient dans le budget restant.
-            if best is not None and not self.timer.has_time(needed=4.0 * slowest):
-                print(f"[AutoML] Budget temps : {cand.name} non essayé (trop long estimé)")
-                continue
+            # Le premier candidat est toujours entraîné (au besoin sur moins de lignes)
+            left = MODEL_SHARE * budget - planned
+            n_fit = rows_within(cand, shape, n_train, left, MIN_ROWS)
+            if n_fit == 0:
+                if best is not None:
+                    print(f"[AutoML] Budget temps : {cand.name} non essayé "
+                          f"(estimé {cand.cost(shape, min(MIN_ROWS, n_train)):.0f}s au minimum)")
+                    continue
+                n_fit = min(MIN_ROWS, n_train)
+            estimate = cand.cost(shape, n_fit)
+            planned += estimate
+            if best is not None and not self.timer.has_time(needed=estimate):
+                print(f"[AutoML] Arrêt de sécurité : plus assez de temps pour {cand.name}")
+                break
+
             start = time.perf_counter()
             try:
-                model = cand.build().fit(Xt_train, y_train)
+                model = cand.build().fit(Xt_train[:n_fit], y_train[:n_fit])
                 valid_metrics = all_metrics(task, y_valid, model.predict(Xt_valid))
                 score = valid_metrics["score"]
             except Exception as exc:  # un modèle qui échoue ne doit pas arrêter fit()
                 print(f"[AutoML] {cand.name} a échoué : {exc}")
                 continue
             duration = time.perf_counter() - start
-            slowest = max(slowest, duration)
-            self.leaderboard.append({"modèle": cand.name, "durée (s)": duration, **valid_metrics})
-            print(f"[AutoML]   {cand.name:24s} score valid = {score:.4f} ({duration:.1f}s)")
+            self.leaderboard.append({"model": cand.name, "rows": n_fit, "estimated_s": estimate,
+                                     "duration_s": duration, **valid_metrics})
+            sous_ech = "" if n_fit == n_train else f", {n_fit}/{n_train} lignes"
+            print(f"[AutoML]   {cand.name:24s} score valid = {score:.4f} "
+                  f"({duration:.1f}s, estimé {estimate:.1f}s{sous_ech})")
             if best is None or score > best[0]:
-                best = (score, cand.name, model, duration, cand)
+                best = (score, cand.name, model, n_fit, cand)
 
         if best is None:
             raise RuntimeError("Aucun modèle n'a pu être entraîné.")
-        score, name, model, duration, cand = best
+        score, name, model, n_fit, cand = best
 
         # Métriques honnêtes : le test interne n'a servi à aucun choix
         self.metrics = {f"valid_{k}": v for k, v in all_metrics(task, y_valid, model.predict(Xt_valid)).items()}
         self.metrics.update({f"test_{k}": v for k, v in all_metrics(task, y_test, model.predict(Xt_test)).items()})
         self.metrics["model"] = name
 
-        # Plus de données = meilleur modèle final, si le temps le permet
+        # Plus de données = meilleur modèle final. Décision prise sur l'estimation
+        # (reproductible) ; l'horloge ne sert que de filet de sécurité.
         self.model = model
-        if self.timer.has_time(needed=1.5 * duration):
+        refit_cost = cand.cost(shape, n_train + Xt_valid.shape[0])
+        if (n_fit == n_train and planned + refit_cost <= REFIT_SHARE * budget
+                and self.timer.has_time(needed=refit_cost)):
             try:
                 self.model = cand.build().fit(_stack(Xt_train, Xt_valid), np.concatenate([y_train, y_valid]))
             except Exception as exc:

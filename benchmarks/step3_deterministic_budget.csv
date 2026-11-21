@@ -1,0 +1,16 @@
+dataset,task,model,valid_score,duration_s,estimated_s,rows,selected,selected_test_score
+data_A,multilabel,logistic_regression,0.8795,3.7,4.3,27351,False,0.8773
+data_A,multilabel,random_forest,0.8811,9.2,25.7,12687,True,0.8773
+data_B,regression,ridge,0.6305,0.0,0.1,3750,False,0.8162
+data_B,regression,random_forest,0.7476,4.8,5.7,3750,False,0.8162
+data_B,regression,hist_gradient_boosting,0.7991,1.3,2.0,3750,True,0.8162
+data_C,multiclass_onehot,logistic_regression,0.8852,4.1,5.7,12000,False,0.926
+data_C,multiclass_onehot,random_forest,0.9424,16.3,24.3,4479,True,0.926
+data_D,binary,logistic_regression,0.7779,0.1,0.2,2237,False,0.7933
+data_D,binary,random_forest,0.804,1.4,3.4,2237,True,0.7933
+data_D,binary,hist_gradient_boosting,0.7935,1.2,4.4,2237,False,0.7933
+data_E,binary,logistic_regression,0.5562,0.1,0.3,2355,False,0.8597
+data_E,binary,random_forest,0.7388,4.4,4.9,2355,False,0.8597
+data_E,binary,hist_gradient_boosting,0.8194,2.2,8.3,2355,True,0.8597
+data_F,multiclass_onehot,linear_svc,0.8994,2.0,2.5,10513,True,0.8924
+data_F,multiclass_onehot,logistic_regression,0.886,24.9,27.5,9404,False,0.8924
