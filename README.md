@@ -57,7 +57,7 @@ Ressources lues à chaque `fit` (variables d'environnement imposées par le suje
 
 ### D'où viennent les valeurs de budget ?
 
-**Le sujet ne fixe aucune valeur** : il dit seulement que le budget est transmis par `AUTOML_TIME_BUDGET` et que `fit` doit le respecter. Toutes les valeurs ci-dessous sont **des choix de l'équipe**, à ajuster quand les enseignants auront indiqué celles du leaderboard.
+**Le sujet ne fixe aucune valeur** : il indique simplement que le budget est transmis par `AUTOML_TIME_BUDGET` et que `fit` doit le respecter. Toutes les valeurs ci-dessous sont **des choix de l'équipe**.
 
 | Valeur | Fichier et ligne | Rôle |
 | --- | --- | --- |
@@ -68,9 +68,8 @@ Ressources lues à chaque `fit` (variables d'environnement imposées par le suje
 | 15 s | [tests/test_model_selection.py, ligne 23](tests/test_model_selection.py#L23) | budget du test « `fit` respecte le budget » |
 | 45 s | [tests/test_config.py, ligne 16](tests/test_config.py#L16) | valeur quelconque pour vérifier que la variable est bien lue |
 
-**Les « 60 s » des résultats de ce README ne sont écrits dans aucun fichier de code** : c'est l'option `--budget 60` passée en ligne de commande à `scripts/evaluate_models.py`, choisie pour tester vite sur un PC portable. Le code s'adapte au budget reçu : avec un budget plus grand, plus de modèles sont essayés sur plus de lignes.
 
-Pour tester avec une autre valeur :
+Pour tester le budget avec une autre valeur :
 
 ```bash
 python scripts/evaluate_models.py --budget 300 --n-jobs 4      # via le script
