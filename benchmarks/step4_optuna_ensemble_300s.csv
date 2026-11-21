@@ -1,0 +1,75 @@
+dataset,task,model,valid_score,duration_s,estimated_s,rows,selected,selected_test_score
+data_A,multilabel,logistic_regression,0.8795,3.8,4.3,27351,False,0.8845
+data_A,multilabel,random_forest,0.8845,28.1,59.7,27351,False,0.8845
+data_A,multilabel,hist_gradient_boosting,0.8863,7.4,70.9,10114,False,0.8845
+data_A,multilabel,ensemble(hist_gradient_boosting + random_forest),0.8866,0.0,0.0,27351,False,0.8845
+data_A,multilabel,ensemble(hist_gradient_boosting + random_forest + logistic_regression),0.8878,0.0,0.0,27351,True,0.8845
+data_B,regression,ridge,0.6423,0.0,0.5,4500,False,0.8171
+data_B,regression,random_forest,0.7532,23.6,27.2,4500,False,0.8171
+data_B,regression,hist_gradient_boosting,0.7904,3.5,9.4,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #0),0.7847,4.7,17.8,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #1),0.7898,4.9,7.7,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #2),0.7813,5.6,13.8,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #3),0.7787,1.3,8.2,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #4),0.7881,5.4,11.3,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #5),0.7884,2.0,7.7,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #6),0.7769,8.2,14.9,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #7),0.7897,2.1,6.9,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #8),0.7862,7.3,17.8,4500,False,0.8171
+data_B,regression,hist_gradient_boosting (optuna #9),0.792,2.7,7.3,4500,True,0.8171
+data_B,regression,random_forest (optuna #0),0.745,16.4,29.1,4500,False,0.8171
+data_B,regression,random_forest (optuna #1),0.7525,9.9,14.1,4500,False,0.8171
+data_B,regression,ensemble(hist_gradient_boosting + random_forest),0.7841,0.0,0.0,4500,False,0.8171
+data_B,regression,ensemble(hist_gradient_boosting + random_forest + ridge),0.7688,0.0,0.0,4500,False,0.8171
+data_C,multiclass_onehot,logistic_regression,0.8852,3.6,5.7,12000,False,0.9445
+data_C,multiclass_onehot,random_forest,0.9537,45.0,72.5,12000,True,0.9445
+data_C,multiclass_onehot,random_forest (optuna #0),0.9458,45.3,94.6,12000,False,0.9445
+data_C,multiclass_onehot,logistic_regression (optuna #0),0.8903,6.7,5.7,12000,False,0.9445
+data_C,multiclass_onehot,logistic_regression (optuna #1),0.8808,2.4,15.9,12000,False,0.9445
+data_C,multiclass_onehot,ensemble(random_forest + logistic_regression),0.9093,0.0,0.0,12000,False,0.9445
+data_D,binary,logistic_regression,0.7973,0.3,0.8,2685,False,0.7933
+data_D,binary,random_forest,0.8237,5.1,16.4,2685,True,0.7933
+data_D,binary,hist_gradient_boosting,0.815,3.5,21.3,2685,False,0.7933
+data_D,binary,random_forest (optuna #0),0.8125,6.1,21.3,2685,False,0.7933
+data_D,binary,random_forest (optuna #1),0.8198,2.8,12.1,2685,False,0.7933
+data_D,binary,random_forest (optuna #2),0.8083,5.4,12.2,2685,False,0.7933
+data_D,binary,random_forest (optuna #3),0.8139,1.8,9.9,2685,False,0.7933
+data_D,binary,random_forest (optuna #4),0.8209,3.1,18.2,2685,False,0.7933
+data_D,binary,random_forest (optuna #5),0.8146,2.9,7.8,2685,False,0.7933
+data_D,binary,random_forest (optuna #6),0.8134,3.0,12.0,2685,False,0.7933
+data_D,binary,random_forest (optuna #7),0.811,3.0,7.2,2685,False,0.7933
+data_D,binary,random_forest (optuna #8),0.8185,6.3,21.6,2685,False,0.7933
+data_D,binary,random_forest (optuna #9),0.8197,10.0,20.5,2685,False,0.7933
+data_D,binary,ensemble(random_forest + hist_gradient_boosting),0.821,0.0,0.0,2685,False,0.7933
+data_D,binary,ensemble(random_forest + hist_gradient_boosting + logistic_regression),0.8216,0.0,0.0,2685,False,0.7933
+data_E,binary,logistic_regression,0.5612,0.2,1.3,2826,False,0.863
+data_E,binary,random_forest,0.7741,17.5,23.2,2826,False,0.863
+data_E,binary,hist_gradient_boosting,0.8273,19.9,39.9,2826,False,0.863
+data_E,binary,hist_gradient_boosting (optuna #0),0.8178,22.6,76.5,2826,False,0.863
+data_E,binary,hist_gradient_boosting (optuna #1),0.8379,21.8,32.1,2826,True,0.863
+data_E,binary,ensemble(hist_gradient_boosting + random_forest),0.8354,0.0,0.0,2826,False,0.863
+data_E,binary,ensemble(hist_gradient_boosting + random_forest + logistic_regression),0.7728,0.0,0.0,2826,False,0.863
+data_F,multiclass_onehot,linear_svc,0.8994,1.4,2.5,10513,False,0.9073
+data_F,multiclass_onehot,logistic_regression,0.8886,18.6,49.1,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb,0.8893,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #0),0.8843,1.2,2.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #1),0.8958,4.7,4.6,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #2),0.9022,2.1,3.0,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #3),0.8994,1.5,2.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #4),0.8387,1.2,2.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #5),0.8387,1.2,2.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #6),0.8191,1.4,2.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #7),0.8964,3.2,4.0,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #8),0.8994,1.6,2.5,10513,False,0.9073
+data_F,multiclass_onehot,linear_svc (optuna #9),0.9021,1.8,2.8,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #0),0.8908,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #1),0.8618,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #2),0.8818,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #3),0.8893,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #4),0.8874,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #5),0.8874,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #6),0.883,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #7),0.8734,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #8),0.89,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,complement_nb (optuna #9),0.8836,0.1,0.5,10513,False,0.9073
+data_F,multiclass_onehot,ensemble(complement_nb + logistic_regression),0.9055,0.0,0.0,10513,True,0.9073

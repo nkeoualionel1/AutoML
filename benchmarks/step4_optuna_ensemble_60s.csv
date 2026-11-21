@@ -1,0 +1,53 @@
+dataset,task,model,valid_score,duration_s,estimated_s,rows,selected,selected_test_score
+data_A,multilabel,logistic_regression,0.8795,2.6,4.3,27351,False,0.8798
+data_A,multilabel,random_forest,0.8806,9.2,22.7,11335,False,0.8798
+data_A,multilabel,logistic_regression (optuna #0),0.8795,2.3,4.3,27351,False,0.8798
+data_A,multilabel,logistic_regression (optuna #1),0.8794,3.2,6.0,27351,False,0.8798
+data_A,multilabel,ensemble(random_forest + logistic_regression),0.8832,0.0,0.0,27351,True,0.8798
+data_B,regression,ridge,0.6305,0.0,0.1,3750,False,0.8131
+data_B,regression,random_forest,0.7476,4.9,5.7,3750,False,0.8131
+data_B,regression,hist_gradient_boosting,0.7991,1.6,2.0,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #0),0.7831,2.3,3.7,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #1),0.8032,2.0,1.6,3750,True,0.8131
+data_B,regression,hist_gradient_boosting (optuna #2),0.7893,1.4,2.9,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #3),0.7805,0.3,1.7,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #4),0.7979,1.3,2.4,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #5),0.7949,0.7,1.6,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #6),0.7872,1.4,3.1,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #7),0.7931,0.8,1.4,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #8),0.79,2.4,3.7,3750,False,0.8131
+data_B,regression,hist_gradient_boosting (optuna #9),0.7969,1.0,1.5,3750,False,0.8131
+data_B,regression,random_forest (optuna #0),0.736,3.8,6.1,3750,False,0.8131
+data_B,regression,ensemble(hist_gradient_boosting + random_forest),0.7864,0.0,0.0,3750,False,0.8131
+data_B,regression,ensemble(hist_gradient_boosting + random_forest + ridge),0.7654,0.0,0.0,3750,False,0.8131
+data_C,multiclass_onehot,logistic_regression,0.8852,4.0,5.7,12000,False,0.9269
+data_C,multiclass_onehot,random_forest,0.9345,14.0,21.3,3980,True,0.9269
+data_C,multiclass_onehot,logistic_regression (optuna #0),0.8903,8.3,5.7,12000,False,0.9269
+data_C,multiclass_onehot,ensemble(random_forest + logistic_regression),0.9087,0.0,0.0,12000,False,0.9269
+data_D,binary,logistic_regression,0.7779,0.1,0.2,2237,False,0.7867
+data_D,binary,random_forest,0.804,1.2,3.4,2237,False,0.7867
+data_D,binary,hist_gradient_boosting,0.7935,1.3,4.4,2237,False,0.7867
+data_D,binary,random_forest (optuna #0),0.7874,1.4,4.5,2237,False,0.7867
+data_D,binary,random_forest (optuna #1),0.8038,0.7,2.5,2237,False,0.7867
+data_D,binary,random_forest (optuna #2),0.7869,1.3,2.6,2237,False,0.7867
+data_D,binary,random_forest (optuna #3),0.7924,0.5,2.1,2237,False,0.7867
+data_D,binary,random_forest (optuna #4),0.8107,0.9,3.8,2237,True,0.7867
+data_D,binary,random_forest (optuna #5),0.7897,0.8,1.6,2237,False,0.7867
+data_D,binary,random_forest (optuna #6),0.7989,0.8,2.5,2237,False,0.7867
+data_D,binary,random_forest (optuna #7),0.7919,0.7,1.5,2237,False,0.7867
+data_D,binary,random_forest (optuna #8),0.7991,1.3,4.5,2237,False,0.7867
+data_D,binary,random_forest (optuna #9),0.8062,1.5,4.3,2237,False,0.7867
+data_D,binary,ensemble(random_forest + hist_gradient_boosting),0.8082,0.0,0.0,2237,False,0.7867
+data_D,binary,ensemble(random_forest + hist_gradient_boosting + logistic_regression),0.7973,0.0,0.0,2237,False,0.7867
+data_E,binary,logistic_regression,0.5562,0.1,0.3,2355,False,0.863
+data_E,binary,random_forest,0.7388,3.7,4.9,2355,False,0.863
+data_E,binary,hist_gradient_boosting,0.8194,1.8,8.3,2355,False,0.863
+data_E,binary,hist_gradient_boosting (optuna #0),0.815,5.0,15.9,2355,False,0.863
+data_E,binary,hist_gradient_boosting (optuna #1),0.8344,5.8,6.7,2355,True,0.863
+data_E,binary,ensemble(hist_gradient_boosting + random_forest),0.8301,0.0,0.0,2355,False,0.863
+data_E,binary,ensemble(hist_gradient_boosting + random_forest + logistic_regression),0.7684,0.0,0.0,2355,False,0.863
+data_F,multiclass_onehot,linear_svc,0.8994,1.9,2.5,10513,False,0.905
+data_F,multiclass_onehot,logistic_regression,0.8582,16.1,24.5,5227,False,0.905
+data_F,multiclass_onehot,linear_svc (optuna #0),0.8843,1.4,2.5,10513,False,0.905
+data_F,multiclass_onehot,linear_svc (optuna #1),0.8958,5.7,4.6,10513,False,0.905
+data_F,multiclass_onehot,linear_svc (optuna #2),0.9022,2.6,3.0,10513,True,0.905

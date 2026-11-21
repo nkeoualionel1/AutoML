@@ -24,8 +24,9 @@ X_DENSE = RNG.randn(150, 5)
 
 @pytest.fixture(autouse=True)
 def _small_budget(monkeypatch):
-    monkeypatch.setenv("AUTOML_TIME_BUDGET", "20")
+    monkeypatch.setenv("AUTOML_TIME_BUDGET", "8")
     monkeypatch.setenv("AUTOML_N_JOBS", "2")
+    monkeypatch.setenv("AUTOML_N_TRIALS", "3")  # quelques essais Optuna suffisent pour tester le contrat
 
 
 @pytest.fixture

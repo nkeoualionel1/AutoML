@@ -2,7 +2,7 @@
 
 Projet AAG (Méthodologie IA et méthodes classiques) – M1 Informatique parcours IA, Le Mans Université.
 
-Pipeline AutoML qui prépare les données, compare plusieurs modèles scikit-learn sous un budget temps, choisit le meilleur et prédit sur des jeux de données inconnus.
+Pipeline AutoML qui prépare les données, compare plusieurs modèles scikit-learn sous un budget temps, optimise leurs hyperparamètres avec Optuna, combine les meilleurs et prédit sur des jeux de données inconnus.
 
 ## Équipe
 
@@ -53,7 +53,7 @@ Ressources lues à chaque `fit` (variables d'environnement imposées par le suje
 | --- | --- | --- |
 | `AUTOML_TIME_BUDGET` | temps maximal d'un `fit` (secondes) | 600 |
 | `AUTOML_N_JOBS` | nombre de cœurs (`-1` est ramené à 1) | 1 |
-| `AUTOML_N_TRIALS` | nombre maximal d'essais d'optimisation (étape 4, à venir) | 20 |
+| `AUTOML_N_TRIALS` | nombre maximal d'essais Optuna, répartis entre les 2 meilleurs modèles (étape 4) | 20 |
 
 ### D'où viennent les valeurs de budget ?
 
@@ -62,10 +62,10 @@ Ressources lues à chaque `fit` (variables d'environnement imposées par le suje
 | Valeur | Fichier et ligne | Rôle |
 | --- | --- | --- |
 | 600 s | [automl/config.py, ligne 65](automl/config.py#L65) | budget par défaut, utilisé **seulement si** `AUTOML_TIME_BUDGET` n'est pas définie |
-| 50 % / 75 % | [automl/\_\_init\_\_.py, lignes 22-23](automl/__init__.py#L22-L23) (`MODEL_SHARE`, `REFIT_SHARE`) | part du budget pour essayer les modèles / avec le réentraînement final ; le reste couvre le chargement, le prétraitement et la marge |
+| 45 % / 65 % / 80 % | [automl/\_\_init\_\_.py, lignes 27-29](automl/__init__.py#L27-L29) (`SCREEN_SHARE`, `HPO_SHARE`, `FINAL_SHARE`) | coût estimé cumulé autorisé après chaque phase : candidats par défaut / + essais Optuna / + réentraînement final ; le reste couvre le chargement, le prétraitement et la marge |
 | 120 s | [scripts/evaluate_models.py, ligne 39](scripts/evaluate_models.py#L39) | budget par défaut du script d'évaluation (option `--budget`) |
-| 20 s | [tests/test_automl_contract.py, ligne 27](tests/test_automl_contract.py#L27) | budget des tests du contrat (petits jeux, pour que les tests restent rapides) |
-| 15 s | [tests/test_model_selection.py, ligne 23](tests/test_model_selection.py#L23) | budget du test « `fit` respecte le budget » |
+| 8 s | [tests/test_automl_contract.py, ligne 27](tests/test_automl_contract.py#L27) | budget des tests du contrat (petits jeux, pour que les tests restent rapides) |
+| 15 s / 60 s | [tests/test_model_selection.py, lignes 42 et 61](tests/test_model_selection.py#L42) | budget du test « `fit` respecte le budget » / du test « Optuna respecte `AUTOML_N_TRIALS` » |
 | 45 s | [tests/test_config.py, ligne 16](tests/test_config.py#L16) | valeur quelconque pour vérifier que la variable est bien lue |
 
 
@@ -125,7 +125,7 @@ python -m pytest tests/test_automl_contract.py   # un seul fichier
 | `tests/test_config.py` | lecture de `AUTOML_*` au moment du `fit` |
 | `tests/test_compliance.py` | règles du sujet : imports interdits, `n_jobs=-1`, fichiers > 5 Mo |
 | `tests/test_automl_contract.py` | `fit` / `eval` / `predict` de bout en bout sur toutes les tâches |
-| `tests/test_model_selection.py` | budget temps respecté et choix du modèle reproductible |
+| `tests/test_model_selection.py` | budget respecté, choix reproductible, limite d'essais Optuna, ensemble, `class_weight`, cible en log |
 
 ### 2. Vérifier le prétraitement (étapes 1 et 2) sur des jeux complets
 
@@ -179,7 +179,7 @@ Exemple de sortie pour un jeu :
 | multi-label | moyenne du F1 macro et de l'accuracy par label | subset_accuracy, label_accuracy, f1_macro |
 | régression | R² | r2, rmse, mae |
 
-Pour **comparer avant / après** une modification (par exemple Optuna), enregistrez les deux CSV dans `benchmarks/` et comparez-les. Références actuelles : [benchmarks/step3_reference.csv](benchmarks/step3_reference.csv) (avant la correction du budget) et [benchmarks/step3_deterministic_budget.csv](benchmarks/step3_deterministic_budget.csv) (actuelle).
+Pour **comparer avant / après** une modification (par exemple Optuna), enregistrez les deux CSV dans `benchmarks/` et comparez-les. Références : [benchmarks/step3_reference.csv](benchmarks/step3_reference.csv) (étape 3, avant la correction du budget), [benchmarks/step3_deterministic_budget.csv](benchmarks/step3_deterministic_budget.csv) (étape 3 corrigée), [benchmarks/step4_optuna_ensemble_60s.csv](benchmarks/step4_optuna_ensemble_60s.csv) et [benchmarks/step4_optuna_ensemble_300s.csv](benchmarks/step4_optuna_ensemble_300s.csv) (actuelles, avec Optuna et ensembling).
 
 ### 4. Dans un notebook
 
@@ -319,15 +319,50 @@ Résultat sur les 6 jeux (partie train) :
 
 ### 10. Tests automatiques et organisation du code
 
-- Dossier [tests/](tests/) : un fichier de test par module (voir le tableau plus haut), 26 tests. Les outils partagés sont dans `tests/conftest.py`.
+- Dossier [tests/](tests/) : un fichier de test par module (voir le tableau plus haut), 30 tests. Les outils partagés sont dans `tests/conftest.py`.
 - Noms de fichiers, de fonctions et de tests en anglais ; commentaires et messages en français pour l'équipe.
 - [PROJECT_JOURNAL.md](PROJECT_JOURNAL.md) : journal des décisions techniques (qui a fait quoi, et pourquoi), pour le poster et la soutenance.
-- [docs/STEPS_1_2_ROBUSTNESS.md](docs/STEPS_1_2_ROBUSTNESS.md) et [docs/STEP3_FIRST_MODELS.md](docs/STEP3_FIRST_MODELS.md) : explications détaillées des étapes 1 à 3.
+- [docs/STEPS_1_2_ROBUSTNESS.md](docs/STEPS_1_2_ROBUSTNESS.md) et [docs/STEP3_FIRST_MODELS.md](docs/STEP3_FIRST_MODELS.md) : explications détaillées des étapes 1 à 3 (les étapes 4 et 5 sont décrites dans la section 11 ci-dessous).
+
+### 11. Étapes 4 et 5 : gains rapides, Optuna, validation croisée et ensembling
+
+`fit` enchaîne maintenant quatre phases ([automl/\_\_init\_\_.py](automl/__init__.py), [automl/models.py](automl/models.py), [automl/selection.py](automl/selection.py)) :
+
+| Phase | Ce qui se passe | Part du budget (coût estimé cumulé) |
+|---|---|---|
+| 1. Candidats | chaque modèle avec ses réglages par défaut | 45 % |
+| 2. Optuna | les 2 meilleurs modèles sont optimisés, au plus `AUTOML_N_TRIALS` essais au total | 65 % |
+| 3. Ensembling | moyenne des probabilités (ou des prédictions en régression) des 2 ou 3 meilleurs modèles différents ; gardée seulement si elle bat le meilleur modèle seul | aucun entraînement en plus |
+| 4. Modèle final | le gagnant est réentraîné sur train + valid, puis noté sur le test interne | 80 % |
+
+- **Gains rapides** :
+  - quand l'inspection détecte des classes déséquilibrées, Optuna essaie aussi `class_weight="balanced"`. C'est la validation qui décide : imposer ce réglage faisait perdre 7 points à la régression logistique sur `data_A` ;
+  - quand la cible de régression est positive et asymétrique, elle est apprise en log (`TransformedTargetRegressor`).
+- **Validation croisée en 5 plis** pour les petits jeux (≤ 5 000 lignes train + valid), si le budget permet d'y faire passer tous les candidats. Sinon, validation simple. Le même évaluateur sert aux phases 1 à 3, donc les scores sont comparables.
+- **Reproductibilité conservée** : avant chaque essai Optuna, son coût estimé est comparé au budget restant. Ce n'est pas le chronomètre qui décide, donc deux exécutions font les mêmes essais (`TPESampler(seed=42)`).
+- **Espaces de recherche** : `C` (logistique, LinearSVC), `alpha` (Ridge, Naive Bayes), nombre d'arbres, `max_features` et `min_samples_leaf` (forêt), `learning_rate`, `max_leaf_nodes`, `min_samples_leaf` et `l2_regularization` (HistGradientBoosting).
+
+**Résultats** (2 cœurs, 20 essais Optuna ; [benchmarks/step4_optuna_ensemble_60s.csv](benchmarks/step4_optuna_ensemble_60s.csv) et [benchmarks/step4_optuna_ensemble_300s.csv](benchmarks/step4_optuna_ensemble_300s.csv)) :
+
+| Jeu | Étape 3, 60 s (valid / test) | Étape 4-5, 60 s (valid / test) | Étape 4-5, 300 s (valid / test) | Modèle retenu à 300 s | `fit` à 300 s |
+|---|---|---|---|---|---:|
+| `data_A` | 0,881 / 0,877 | 0,883 / 0,880 | **0,888 / 0,885** | ensemble (boosting + forêt + logistique) | 41 s |
+| `data_B` | 0,799 / 0,816 | 0,803 / 0,813 | 0,792 / **0,817** | boosting optimisé par Optuna (CV) | 99 s |
+| `data_C` | 0,942 / 0,926 | 0,935 / 0,927 | **0,954 / 0,945** | forêt sur toutes les lignes | 114 s |
+| `data_D` | 0,804 / 0,793 | 0,811 / 0,787 | 0,824 / 0,793 | forêt (CV) | 55 s |
+| `data_E` | 0,819 / 0,860 | 0,834 / 0,863 | 0,838 / 0,863 | boosting optimisé par Optuna (CV) | 86 s |
+| `data_F` | 0,899 / 0,892 | 0,902 / 0,905 | **0,906 / 0,907** | ensemble (Naive Bayes + logistique) | 62 s |
+
+À lire avec prudence :
+- les scores « valid » ne se comparent pas directement d'une colonne à l'autre : à 300 s, `data_B`, `data_D` et `data_E` passent en validation croisée, dont le score est plus fiable (et souvent un peu plus bas) qu'une validation simple ;
+- le **test interne** est la meilleure mesure de la performance réelle : il progresse surtout sur `data_C` (+1,9 point) et `data_F` (+1,5 point) ;
+- à 60 s, sur `data_D`, Optuna améliore la validation mais pas le test : avec ~450 lignes de validation, il apprend en partie le hasard du découpage. La validation croisée, active à 300 s, limite ce problème ;
+- le budget est toujours respecté (114 s au maximum pour 300 s). Les estimations de coût sont volontairement prudentes : une partie du budget reste inutilisée. On pourra les ajuster après des mesures sur Skinner.
 
 ### Structure du dépôt
 
 ```text
-automl/        package installé par pip : config, data, inspection, preprocessing, models, metrics
+automl/        package installé par pip : config, data, inspection, preprocessing, models, selection, metrics
 tests/         tests pytest (un fichier par module)
 scripts/       outils : installation, génération de jeux de test, vérifications, évaluation
 notebooks/     01 exploration, 02 baseline, 03 à 05 visualisation des étapes 1 à 3
@@ -347,8 +382,9 @@ test_datasets/ jeux de test générés (local, ignoré par git)
 - [x] Implémenter le modèle dans `fit`, puis `eval` et `predict` (avec sortie one-hot quand nécessaire)
 - [x] Respecter le budget temps et rendre le choix du modèle reproductible
 - [x] Battre les scores de la baseline (`data_B`, `data_C`, `data_D`)
-- [ ] Gains rapides : `class_weight="balanced"` quand les classes sont déséquilibrées, transformation log de la cible asymétrique
-- [ ] Optimiser les hyperparamètres avec Optuna (`AUTOML_N_TRIALS`), avec validation croisée sur les petits jeux
-- [ ] Combiner les meilleurs modèles (ensembling)
+- [x] Gains rapides : `class_weight="balanced"` essayé quand les classes sont déséquilibrées, transformation log de la cible asymétrique
+- [x] Optimiser les hyperparamètres avec Optuna (`AUTOML_N_TRIALS`), avec validation croisée sur les petits jeux quand le budget le permet
+- [x] Combiner les meilleurs modèles (ensembling)
+- [ ] Demander aux enseignants les valeurs de `AUTOML_TIME_BUDGET`, `AUTOML_N_JOBS`, `AUTOML_N_TRIALS` du leaderboard
 - [ ] Vérifier le budget temps et les scores sur Skinner
 - [ ] Préparer le poster et la soutenance

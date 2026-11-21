@@ -7,30 +7,33 @@ if _os.environ.get("AUTOML_N_JOBS", "").strip().isdigit():
         _os.environ.setdefault(_var, str(max(1, int(_os.environ["AUTOML_N_JOBS"]))))
 
 import time  # noqa: E402
+from typing import List, Optional  # noqa: E402
 
 import numpy as np  # noqa: E402
-import scipy.sparse as sp  # noqa: E402
+import optuna  # noqa: E402
 
-from .config import ResourceConfig, TimeBudget, limit_native_threads, set_seed  # noqa: E402
+from .config import RANDOM_STATE, ResourceConfig, TimeBudget, limit_native_threads, set_seed  # noqa: E402
 from .data import load_dataset, split_data  # noqa: E402
 from .inspection import DataProfile, TaskInfo, detect_task, inspect_data  # noqa: E402
 from .metrics import all_metrics  # noqa: E402
-from .models import data_shape, get_candidates, rows_within  # noqa: E402
+from .models import data_shape, get_candidates, no_space, rows_within  # noqa: E402
 from .preprocessing import build_preprocessor  # noqa: E402
+from .selection import CV_FOLDS, AveragingEnsemble, Evaluator, Result, choose_cv, stack_rows  # noqa: E402
 
-# Répartition du budget temps : le reste couvre chargement, prétraitement et marge
-MODEL_SHARE = 0.50   # coût estimé total des modèles essayés
-REFIT_SHARE = 0.75   # coût estimé total, réentraînement final sur train + valid compris
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+# Répartition du budget temps (coûts estimés cumulés). Le reste couvre le
+# chargement, le prétraitement et une marge de sécurité.
+SCREEN_SHARE = 0.45  # phase 1 : chaque candidat avec ses réglages par défaut
+HPO_SHARE = 0.65     # phase 2 : + essais Optuna
+FINAL_SHARE = 0.80   # phase 4 : + réentraînement final sur train + valid
 MIN_ROWS = 500       # en dessous, un modèle n'est pas essayé (sauf le premier)
-
-
-def _stack(a, b):
-    """Empile deux matrices (denses ou creuses) ligne par ligne."""
-    return sp.vstack([a, b], format="csr") if sp.issparse(a) else np.vstack([a, b])
+MAX_TUNED = 2        # nombre de candidats optimisés par Optuna (les meilleurs)
+ENSEMBLE_MAX = 3     # nombre maximal de modèles moyennés dans un ensemble
 
 
 class AutoML:
-    """Pipeline AutoML : inspection -> prétraitement -> choix du modèle sous budget temps."""
+    """Pipeline AutoML : inspection -> prétraitement -> modèles, Optuna et ensembling sous budget temps."""
 
     def __init__(self):
         self.model = None
@@ -46,7 +49,7 @@ class AutoML:
     def fit(self, data_dest: str) -> "AutoML":
         print(f"[AutoML] Entraînement sur {data_dest}...")
         self.prepare(data_dest)
-        # Étape 3 : choix du modèle sur la validation, puis réentraînement sur train + valid
+        # Étapes 3 à 5 : candidats, Optuna, ensembling, puis réentraînement sur train + valid
         self._select_model()
         return self
 
@@ -86,77 +89,167 @@ class AutoML:
         return self
 
     def _select_model(self) -> None:
-        """Entraîne les candidats selon un plan fixé à l'avance, garde le meilleur.
+        """Étapes 3 à 5 : comparaison des candidats, Optuna, ensembling, modèle final.
 
-        Le plan (quels modèles, sur combien de lignes) est calculé à partir des
-        coûts estimés, qui ne dépendent que de la taille des données et du budget :
-        deux exécutions font donc exactement les mêmes choix (reproductibilité).
-        L'horloge ne sert que de filet de sécurité si la machine est bien plus
-        lente que prévu.
+        Tout le plan (quels modèles, sur combien de lignes, combien d'essais Optuna)
+        est décidé à partir des coûts estimés, qui ne dépendent que de la taille
+        des données et du budget : deux exécutions font exactement les mêmes choix
+        (reproductibilité). L'horloge ne sert que de filet de sécurité si la
+        machine est bien plus lente que prévu.
         """
         Xt_train, y_train = self.splits["train"]
         Xt_valid, y_valid = self.splits["valid"]
         Xt_test, y_test = self.splits["test"]
-        task = self.task.task
-        n_train = Xt_train.shape[0]
-        shape = data_shape(Xt_train, self.task, self.config.n_jobs)
         budget = self.config.time_budget
-        best = None  # (score, nom, modèle, lignes utilisées, candidat)
+        shape = data_shape(Xt_train, self.task, self.config.n_jobs)
+        candidates = get_candidates(self.profile, self.config.n_jobs)
+        n_all = Xt_train.shape[0] + Xt_valid.shape[0]
+        use_cv = choose_cv(candidates, shape, n_all, SCREEN_SHARE * budget)
+        ev = Evaluator(self.task, Xt_train, y_train, Xt_valid, y_valid, use_cv)
+        print(f"[AutoML] Validation : {f'croisée en {CV_FOLDS} plis' if ev.use_cv else 'simple'}")
         self.leaderboard = []
+        self._planned = 0.0  # somme des coûts estimés déjà engagés
 
-        planned = 0.0  # somme des coûts estimés des modèles déjà lancés
-        for cand in get_candidates(self.profile, self.config.n_jobs):
-            # Le premier candidat est toujours entraîné (au besoin sur moins de lignes)
-            left = MODEL_SHARE * budget - planned
-            n_fit = rows_within(cand, shape, n_train, left, MIN_ROWS)
-            if n_fit == 0:
-                if best is not None:
-                    print(f"[AutoML] Budget temps : {cand.name} non essayé "
-                          f"(estimé {cand.cost(shape, min(MIN_ROWS, n_train)):.0f}s au minimum)")
+        results = self._screen_candidates(ev, shape, budget, candidates)
+        if not results:
+            raise RuntimeError("Aucun modèle n'a pu être entraîné.")
+        results += self._tune_with_optuna(ev, shape, budget, results)
+        winner = self._try_ensembles(ev, results)
+        self._fit_final(ev, shape, budget, winner, Xt_test, y_test)
+
+    def _run(self, ev: Evaluator, cand, params, rows, estimate, label) -> Optional[Result]:
+        """Évalue un candidat, l'ajoute au leaderboard, renvoie None en cas d'échec."""
+        start = time.perf_counter()
+        try:
+            res = ev.evaluate(cand, params, rows)
+        except Exception as exc:  # un modèle qui échoue ne doit pas arrêter fit()
+            print(f"[AutoML] {label} a échoué : {exc}")
+            return None
+        res.name, res.estimated_s, res.duration_s = label, estimate, time.perf_counter() - start
+        self.leaderboard.append({"model": label, "rows": rows, "estimated_s": estimate,
+                                 "duration_s": res.duration_s, **res.metrics})
+        sub = "" if rows == ev.n_max else f", {rows}/{ev.n_max} lignes"
+        print(f"[AutoML]   {label:34s} score = {res.score:.4f} "
+              f"({res.duration_s:.1f}s, estimé {estimate:.1f}s{sub})")
+        return res
+
+    def _screen_candidates(self, ev: Evaluator, shape, budget, candidates) -> List[Result]:
+        """Phase 1 : chaque candidat avec ses réglages par défaut."""
+        results = []
+        for cand in candidates:
+            left = SCREEN_SHARE * budget - self._planned
+            rows = rows_within(lambda n: ev.cost(cand, shape, n), ev.n_max, left, MIN_ROWS)
+            if ev.use_cv and rows < ev.n_max:
+                rows = 0  # en validation croisée, on garde toutes les lignes ou on saute
+            if rows == 0:
+                if results:
+                    print(f"[AutoML] Budget temps : {cand.name} non essayé")
                     continue
-                n_fit = min(MIN_ROWS, n_train)
-            estimate = cand.cost(shape, n_fit)
-            planned += estimate
-            if best is not None and not self.timer.has_time(needed=estimate):
+                rows = min(MIN_ROWS, ev.n_max)  # le premier candidat est toujours essayé
+            estimate = ev.cost(cand, shape, rows)
+            if results and not self.timer.has_time(needed=estimate):
                 print(f"[AutoML] Arrêt de sécurité : plus assez de temps pour {cand.name}")
                 break
+            self._planned += estimate
+            res = self._run(ev, cand, {}, rows, estimate, cand.name)
+            if res is not None:
+                results.append(res)
+        return results
 
-            start = time.perf_counter()
-            try:
-                model = cand.build().fit(Xt_train[:n_fit], y_train[:n_fit])
-                valid_metrics = all_metrics(task, y_valid, model.predict(Xt_valid))
-                score = valid_metrics["score"]
-            except Exception as exc:  # un modèle qui échoue ne doit pas arrêter fit()
-                print(f"[AutoML] {cand.name} a échoué : {exc}")
+    def _tune_with_optuna(self, ev: Evaluator, shape, budget, screened: List[Result]) -> List[Result]:
+        """Phase 2 : Optuna sur les meilleurs candidats, dans la limite de N_TRIALS et du budget.
+
+        Avant chaque essai, son coût estimé est comparé au budget restant : la suite
+        des essais ne dépend donc pas du chronomètre (reproductible).
+        """
+        n_trials = self.config.n_trials
+        tunable = [r for r in sorted(screened, key=lambda r: -r.score) if r.cand.space is not no_space]
+        tunable = tunable[:MAX_TUNED]
+        if n_trials <= 0 or not tunable:
+            return []
+        # Les essais sont répartis entre les candidats optimisés (le meilleur d'abord)
+        per_model = [n_trials // len(tunable) + (1 if i < n_trials % len(tunable) else 0)
+                     for i in range(len(tunable))]
+        tuned = []
+        for base, trials in zip(tunable, per_model):
+            if trials == 0:
                 continue
-            duration = time.perf_counter() - start
-            self.leaderboard.append({"model": cand.name, "rows": n_fit, "estimated_s": estimate,
-                                     "duration_s": duration, **valid_metrics})
-            sous_ech = "" if n_fit == n_train else f", {n_fit}/{n_train} lignes"
-            print(f"[AutoML]   {cand.name:24s} score valid = {score:.4f} "
-                  f"({duration:.1f}s, estimé {estimate:.1f}s{sous_ech})")
-            if best is None or score > best[0]:
-                best = (score, cand.name, model, n_fit, cand)
+            cand, rows = base.cand, base.rows
+            best: List[Result] = []
 
-        if best is None:
-            raise RuntimeError("Aucun modèle n'a pu être entraîné.")
-        score, name, model, n_fit, cand = best
+            def objective(trial):
+                params = cand.space(trial, shape)
+                estimate = ev.cost(cand, shape, rows, params)
+                if (self._planned + estimate > HPO_SHARE * budget
+                        or not self.timer.has_time(needed=estimate)):
+                    trial.study.stop()  # plus de budget : on arrête cette étude
+                    raise optuna.TrialPruned()
+                self._planned += estimate
+                res = self._run(ev, cand, params, rows, estimate, f"{cand.name} (optuna #{trial.number})")
+                if res is None:
+                    raise optuna.TrialPruned()
+                if not best or res.score > best[0].score:
+                    best[:] = [res]
+                return res.score
 
+            study = optuna.create_study(direction="maximize",
+                                        sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
+            study.optimize(objective, n_trials=trials)
+            if best and best[0].score > base.score:
+                tuned.append(best[0])
+                print(f"[AutoML] Optuna améliore {cand.name} : {base.score:.4f} -> {best[0].score:.4f}")
+        return tuned
+
+    def _try_ensembles(self, ev: Evaluator, results: List[Result]):
+        """Phase 3 : moyenne des 2 ou 3 meilleurs modèles différents, gardée si elle gagne."""
+        best_single = max(results, key=lambda r: r.score)
+        winner = (best_single.score, best_single.name, [best_single], best_single.metrics)
+        # Le meilleur réglage de chaque famille de modèles, s'il donne des probabilités
+        per_family = {}
+        for r in sorted(results, key=lambda r: -r.score):
+            if r.soft is not None and r.cand.name not in per_family:
+                per_family[r.cand.name] = r
+        ranked = list(per_family.values())
+        for k in range(2, min(ENSEMBLE_MAX, len(ranked)) + 1):
+            members = ranked[:k]
+            metrics = ev.score_ensemble(members)
+            label = "ensemble(" + " + ".join(m.cand.name for m in members) + ")"
+            self.leaderboard.append({"model": label, "rows": max(m.rows for m in members),
+                                     "estimated_s": 0.0, "duration_s": 0.0, **metrics})
+            print(f"[AutoML]   {label:34s} score = {metrics['score']:.4f}")
+            if metrics["score"] > winner[0]:
+                winner = (metrics["score"], label, members, metrics)
+        return winner
+
+    def _fit_final(self, ev: Evaluator, shape, budget, winner, Xt_test, y_test) -> None:
+        """Phase 4 : réentraîne le gagnant sur train + valid si le budget le permet."""
+        score, name, members, valid_metrics = winner
+        X_all = stack_rows(self.splits["train"][0], self.splits["valid"][0])
+        y_all = np.concatenate([self.splits["train"][1], self.splits["valid"][1]])
+        n_all = X_all.shape[0]
+
+        def refit_cost(n):
+            return sum(m.cand.estimate(shape, n, m.params) for m in members)
+
+        left = max(FINAL_SHARE * budget - self._planned, 0.0)
+        rows = rows_within(refit_cost, n_all, left, MIN_ROWS)
+        have_models = all(m.model is not None for m in members)
+        if rows == n_all and self.timer.has_time(needed=refit_cost(n_all)):
+            models = [m.cand.build(m.params).fit(X_all, y_all) for m in members]
+        elif have_models:
+            models = [m.model for m in members]  # déjà entraînés sur le train : on les garde
+        else:
+            # Validation croisée sans modèle gardé : entraînement sur ce qui tient dans le budget
+            rows = rows or min(MIN_ROWS, n_all)
+            models = [m.cand.build(m.params).fit(X_all[:rows], y_all[:rows]) for m in members]
+
+        self.model = models[0] if len(models) == 1 else AveragingEnsemble(models, self.task)
         # Métriques honnêtes : le test interne n'a servi à aucun choix
-        self.metrics = {f"valid_{k}": v for k, v in all_metrics(task, y_valid, model.predict(Xt_valid)).items()}
-        self.metrics.update({f"test_{k}": v for k, v in all_metrics(task, y_test, model.predict(Xt_test)).items()})
+        self.metrics = {f"valid_{k}": v for k, v in valid_metrics.items()}
+        self.metrics.update({f"test_{k}": v for k, v in
+                             all_metrics(self.task.task, y_test, self.model.predict(Xt_test)).items()})
         self.metrics["model"] = name
-
-        # Plus de données = meilleur modèle final. Décision prise sur l'estimation
-        # (reproductible) ; l'horloge ne sert que de filet de sécurité.
-        self.model = model
-        refit_cost = cand.cost(shape, n_train + Xt_valid.shape[0])
-        if (n_fit == n_train and planned + refit_cost <= REFIT_SHARE * budget
-                and self.timer.has_time(needed=refit_cost)):
-            try:
-                self.model = cand.build().fit(_stack(Xt_train, Xt_valid), np.concatenate([y_train, y_valid]))
-            except Exception as exc:
-                print(f"[AutoML] Réentraînement final impossible ({exc}) : on garde le modèle du train")
+        self.metrics["validation"] = f"croisée ({CV_FOLDS} plis)" if ev.use_cv else "simple"
         print(f"[AutoML] Modèle retenu : {name} (fit total {self.timer.elapsed:.1f}s)")
 
     def eval(self) -> dict:
