@@ -20,7 +20,7 @@ pip install .
 
 Ou, pour créer l'environnement complet (venv + packages autorisés + kernel Jupyter) :
 
-#### Linux / Skinner
+### Linux / Skinner
 
 ```bash
 bash scripts/setup_autoML.bash
@@ -28,7 +28,7 @@ source ./automl_env/bin/activate
 python check_autoML.py   # vérifie que l'environnement est conforme
 ```
 
-#### Windows (PowerShell)
+### Windows (PowerShell)
 
 ```powershell
 python -m venv automl_env
@@ -54,6 +54,32 @@ Ressources lues à chaque `fit` (variables d'environnement imposées par le suje
 | `AUTOML_TIME_BUDGET` | temps maximal d'un `fit` (secondes) | 600 |
 | `AUTOML_N_JOBS` | nombre de cœurs (`-1` est ramené à 1) | 1 |
 | `AUTOML_N_TRIALS` | nombre maximal d'essais d'optimisation (étape 4, à venir) | 20 |
+
+### D'où viennent les valeurs de budget ?
+
+**Le sujet ne fixe aucune valeur** : il dit seulement que le budget est transmis par `AUTOML_TIME_BUDGET` et que `fit` doit le respecter. Toutes les valeurs ci-dessous sont **des choix de l'équipe**, à ajuster quand les enseignants auront indiqué celles du leaderboard.
+
+| Valeur | Fichier et ligne | Rôle |
+| --- | --- | --- |
+| 600 s | [automl/config.py, ligne 65](automl/config.py#L65) | budget par défaut, utilisé **seulement si** `AUTOML_TIME_BUDGET` n'est pas définie |
+| 50 % / 75 % | [automl/\_\_init\_\_.py, lignes 22-23](automl/__init__.py#L22-L23) (`MODEL_SHARE`, `REFIT_SHARE`) | part du budget pour essayer les modèles / avec le réentraînement final ; le reste couvre le chargement, le prétraitement et la marge |
+| 120 s | [scripts/evaluate_models.py, ligne 39](scripts/evaluate_models.py#L39) | budget par défaut du script d'évaluation (option `--budget`) |
+| 20 s | [tests/test_automl_contract.py, ligne 27](tests/test_automl_contract.py#L27) | budget des tests du contrat (petits jeux, pour que les tests restent rapides) |
+| 15 s | [tests/test_model_selection.py, ligne 23](tests/test_model_selection.py#L23) | budget du test « `fit` respecte le budget » |
+| 45 s | [tests/test_config.py, ligne 16](tests/test_config.py#L16) | valeur quelconque pour vérifier que la variable est bien lue |
+
+**Les « 60 s » des résultats de ce README ne sont écrits dans aucun fichier de code** : c'est l'option `--budget 60` passée en ligne de commande à `scripts/evaluate_models.py`, choisie pour tester vite sur un PC portable. Le code s'adapte au budget reçu : avec un budget plus grand, plus de modèles sont essayés sur plus de lignes.
+
+Pour tester avec une autre valeur :
+
+```bash
+python scripts/evaluate_models.py --budget 300 --n-jobs 4      # via le script
+AUTOML_TIME_BUDGET=300 python -c "import automl; automl.fit('dataset/data_E'); automl.eval()"   # Linux
+```
+
+```powershell
+$env:AUTOML_TIME_BUDGET = "300"    # Windows : vaut pour tout le terminal
+```
 
 ## Données
 
@@ -125,7 +151,7 @@ Options : `--budget` (secondes par jeu, défaut 120), `--n-jobs` (cœurs, défau
 
 Exemple de sortie pour un jeu :
 
-```
+```text
 === data_E === (budget 60 s, 2 cœurs)
   Tâche : binary
   modèle                   score valid    durée  estimée   lignes
@@ -281,7 +307,7 @@ Résultat sur les 6 jeux (partie train) :
   - Avant : `fit` dépassait le budget (112 s pour 60 s sur `data_A`) et pouvait choisir un modèle différent d'une exécution à l'autre.
   - Après : le budget est respecté sur les 6 jeux, et deux exécutions donnent exactement les mêmes choix et les mêmes prédictions (vérifié par `tests/test_model_selection.py`).
 
-**Résultats actuels** (budget 60 s, 2 cœurs, [benchmarks/step3_deterministic_budget.csv](benchmarks/step3_deterministic_budget.csv)) :
+**Résultats actuels** (budget 60 s choisi pour les tests, et non imposé par le sujet ; 2 cœurs ; [benchmarks/step3_deterministic_budget.csv](benchmarks/step3_deterministic_budget.csv)) :
 
 | Jeu | Tâche | Modèle retenu | Score valid | Test interne | Baseline (notebook 02) | `fit` |
 | --- | --- | --- | ---: | ---: | --- | ---: |
@@ -301,7 +327,7 @@ Résultat sur les 6 jeux (partie train) :
 
 ### Structure du dépôt
 
-```
+```text
 automl/        package installé par pip : config, data, inspection, preprocessing, models, metrics
 tests/         tests pytest (un fichier par module)
 scripts/       outils : installation, génération de jeux de test, vérifications, évaluation
