@@ -62,15 +62,16 @@ def main():
             with contextlib.redirect_stdout(io.StringIO()):
                 m.fit(os.path.join(folder, name))
         except Exception as e:
-            print(f"  ❌ fit a planté : {type(e).__name__}: {e}")
+            print(f"   fit a planté : {type(e).__name__}: {e}")
             continue
         elapsed = time.perf_counter() - start
 
         print(f"  Tâche : {m.task.task}")
-        print(f"  {'modèle':24s} {'score valid':>11s} {'durée':>8s} {'estimée':>8s} {'lignes':>8s}")
+        width = max(24, *(len(r["model"]) for r in m.leaderboard))
+        print(f"  {'modèle':{width}s} {'score valid':>11s} {'durée':>8s} {'estimée':>8s} {'lignes':>8s}")
         for r in m.leaderboard:
             mark = "  <- retenu" if r["model"] == m.metrics["model"] else ""
-            print(f"  {r['model']:24s} {r['score']:11.4f} {r['duration_s']:7.1f}s "
+            print(f"  {r['model']:{width}s} {r['score']:11.4f} {r['duration_s']:7.1f}s "
                   f"{r['estimated_s']:7.1f}s {r['rows']:>8}{mark}")
         details = ", ".join(f"{k[5:]}={v:.4f}" for k, v in m.metrics.items()
                             if k.startswith("test_") and k != "test_score")

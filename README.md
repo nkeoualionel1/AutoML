@@ -18,24 +18,7 @@ Pipeline AutoML qui prépare les données, compare plusieurs modèles scikit-lea
 pip install .
 ```
 
-Ou, pour créer l'environnement complet (venv + packages autorisés + kernel Jupyter) :
-
-### Linux / Skinner
-
-```bash
-bash scripts/setup_autoML.bash
-source ./automl_env/bin/activate
-python check_autoML.py   # vérifie que l'environnement est conforme
-```
-
-### Windows (PowerShell)
-
-```powershell
-python -m venv automl_env
-.\automl_env\Scripts\python.exe -m pip install . pytest
-```
-
-Pour taper simplement `python` au lieu de `.\automl_env\Scripts\python.exe`, activez le venv avec `.\automl_env\Scripts\Activate.ps1`. Si PowerShell bloque l'activation, lancez une fois `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+Installation complète (venv, Windows / Linux / Skinner, tests) : voir le [guide pas à pas](#guide-pas-à-pas--de-linstallation-aux-métriques) plus bas.
 
 ## Utilisation
 
@@ -67,7 +50,6 @@ Ressources lues à chaque `fit` (variables d'environnement imposées par le suje
 | 8 s | [tests/test_automl_contract.py, ligne 27](tests/test_automl_contract.py#L27) | budget des tests du contrat (petits jeux, pour que les tests restent rapides) |
 | 15 s / 60 s | [tests/test_model_selection.py, lignes 42 et 61](tests/test_model_selection.py#L42) | budget du test « `fit` respecte le budget » / du test « Optuna respecte `AUTOML_N_TRIALS` » |
 | 45 s | [tests/test_config.py, ligne 16](tests/test_config.py#L16) | valeur quelconque pour vérifier que la variable est bien lue |
-
 
 Pour tester le budget avec une autre valeur :
 
@@ -103,19 +85,83 @@ Chaque jeu contient trois fichiers :
 
 ---
 
-## Lancer les tests et voir les métriques
+## Guide pas à pas : de l'installation aux métriques
 
-Toutes les commandes se lancent **depuis la racine du projet**. Sous Windows, remplacez `python` par `.\automl_env\Scripts\python.exe` si le venv n'est pas activé.
+Toutes les commandes se lancent **depuis la racine du projet** (le dossier qui contient `pyproject.toml`). Suivez les étapes dans l'ordre la première fois. Ensuite, seules les étapes 5 à 8 sont à refaire après chaque modification du code.
 
-### 1. Tests automatiques (`pytest`) : est-ce que rien n'est cassé ?
+### Étape 1 – Récupérer le projet
 
 ```bash
-python -m pytest tests          # résumé : "26 passed"
-python -m pytest tests -v       # le détail, test par test
+git clone https://github.com/nkeoualionel1/AutoML.git
+cd AutoML
+```
+
+Si vous avez déjà le projet, récupérez la dernière version avec `git pull`.
+
+### Étape 2 – Créer l'environnement et installer le package
+
+#### Windows (PowerShell)
+
+```powershell
+python -m venv automl_env
+.\automl_env\Scripts\python.exe -m pip install . pytest
+```
+
+Pour taper simplement `python` au lieu de `.\automl_env\Scripts\python.exe`, activez le venv dans chaque nouveau terminal :
+
+```powershell
+.\automl_env\Scripts\Activate.ps1          # l'invite doit commencer par (automl_env)
+```
+
+Si PowerShell refuse (« l'exécution de scripts est désactivée »), lancez une fois `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Si `python` répond `No module named 'scipy'`, c'est que le venv n'est pas activé dans ce terminal.
+
+#### Linux / Skinner
+
+```bash
+bash scripts/setup_autoML.bash             # crée automl_env et installe les packages autorisés
+source ./automl_env/bin/activate
+pip install . pytest
+```
+
+Dans la suite du guide, `python` désigne le Python du venv.
+
+### Étape 3 – Vérifier l'environnement
+
+```bash
+python check_autoML.py
+```
+
+Le script liste les packages autorisés installés et signale tout package interdit (torch, xgboost…). Il vérifie aussi les outils des notebooks et de l'exploration (matplotlib, seaborn, plotext, visidata, ipykernel), que seul `setup_autoML.bash` installe. Après l'installation Windows de l'étape 2, ces cinq outils apparaissent en ✗ et le script conclut « Des problèmes ont été détectés » : cela n'empêche **pas** d'utiliser le package ni de lancer les étapes 5 à 9. Pour les notebooks, installez-les avec :
+
+```powershell
+.\automl_env\Scripts\python.exe -m pip install matplotlib seaborn ipykernel plotext visidata
+```
+
+Ce qui compte, c'est la partie « packages INTERDITS » : elle doit être entièrement conforme.
+
+### Étape 4 – Récupérer les données
+
+Sur Skinner, les données sont dans `/info/corpus/ChallengeMachineLearning` : il suffit de passer ce chemin aux scripts avec `--folder` (étapes 6 et 7).
+
+En local, copiez-les dans un dossier `dataset/` à la racine du projet, par exemple depuis Skinner :
+
+```bash
+scp -r <login>@<adresse-de-skinner>:/info/corpus/ChallengeMachineLearning ./dataset
+```
+
+Remplacez `<login>` et `<adresse-de-skinner>` par vos identifiants de connexion au cluster.
+
+On doit obtenir `dataset/data_A/`, …, `dataset/data_F/`. Ce dossier est **ignoré par git** : `data_C.data` fait 65 Mo, alors que le sujet interdit tout fichier de plus de 5 Mo dans le dépôt.
+
+### Étape 5 – Lancer les tests automatiques (`pytest`)
+
+```bash
+python -m pytest tests                     # résumé attendu : "30 passed"
+python -m pytest tests -v                  # le détail, test par test
 python -m pytest tests/test_automl_contract.py   # un seul fichier
 ```
 
-À lancer **avant chaque commit et chaque fusion de branche**. Les tests utilisent de petits jeux créés à la volée : ils ne demandent pas `dataset/` et prennent environ 40 s. Chaque fichier explique en en-tête son rôle et quand le lancer :
+Les tests créent leurs propres petits jeux de données à la volée, dans un dossier temporaire du système : ils n'ont pas besoin de `dataset/` et prennent environ 2 minutes. **Tout doit être vert avant de passer à la suite**, et avant chaque commit ou fusion de branche. Chaque fichier explique en en-tête son rôle et quand le lancer :
 
 | Fichier | Ce qu'il vérifie |
 | --- | --- |
@@ -127,72 +173,136 @@ python -m pytest tests/test_automl_contract.py   # un seul fichier
 | `tests/test_automl_contract.py` | `fit` / `eval` / `predict` de bout en bout sur toutes les tâches |
 | `tests/test_model_selection.py` | budget respecté, choix reproductible, limite d'essais Optuna, ensemble, `class_weight`, cible en log |
 
-### 2. Vérifier le prétraitement (étapes 1 et 2) sur des jeux complets
+Si un test échoue, pytest affiche son nom et la ligne qui ne passe pas (`FAILED tests/...`). Il faut corriger avant de continuer.
+
+### Étape 6 – Vérifier le prétraitement sur des jeux complets
 
 ```bash
 python scripts/check_preprocessing.py --folder dataset   # nos 6 jeux -> "6/6 jeux OK"
-python scripts/generate_test_datasets.py                 # une fois : crée test_datasets/ (20 jeux)
+python scripts/generate_test_datasets.py                 # une seule fois : crée test_datasets/ (20 jeux, accès Internet)
 python scripts/check_preprocessing.py                    # les 20 jeux -> "20/20 jeux OK"
 python scripts/check_preprocessing.py test_adult         # un seul jeu
 ```
 
+Sur Skinner : `python scripts/check_preprocessing.py --folder /info/corpus/ChallengeMachineLearning`.
+
 Pour chaque jeu, le script affiche le profil détecté (tâche, types de colonnes, valeurs manquantes, colonnes asymétriques, déséquilibre), puis une série de ✅ / ❌ : aucun NaN ni infini, format creux conservé, même largeur entre train, valid et test, décodage fidèle de la cible. Aucun modèle n'est entraîné, donc c'est rapide (environ 1 min).
 
-### 3. Entraîner les modèles et voir les métriques
+### Étape 7 – Entraîner les modèles et obtenir les métriques
 
 ```bash
 python scripts/evaluate_models.py --budget 60                                   # les 6 jeux, 60 s chacun
 python scripts/evaluate_models.py data_E --budget 60                            # un seul jeu
-python scripts/evaluate_models.py --budget 60 --csv benchmarks/mon_essai.csv    # + sauvegarde CSV
+python scripts/evaluate_models.py --budget 300 --csv benchmarks/mon_essai.csv   # + sauvegarde CSV
 ```
 
-Options : `--budget` (secondes par jeu, défaut 120), `--n-jobs` (cœurs, défaut 2), `--folder` (défaut `dataset`).
+Options : `--budget` (secondes par jeu, défaut 120), `--n-jobs` (cœurs, défaut 2), `--folder` (défaut `dataset`, ou `/info/corpus/ChallengeMachineLearning` sur Skinner). Le nombre d'essais Optuna se règle avec la variable `AUTOML_N_TRIALS` (défaut 20). Comptez au plus le budget × le nombre de jeux : 6 minutes pour les 6 jeux à 60 s.
 
-Exemple de sortie pour un jeu :
+Exemple de sortie réelle pour `data_E` (budget 60 s, 2 cœurs) :
 
 ```text
 === data_E === (budget 60 s, 2 cœurs)
   Tâche : binary
-  modèle                   score valid    durée  estimée   lignes
-  logistic_regression           0.5562     0.1s     0.3s     2355
-  random_forest                 0.7388     4.4s     4.9s     2355
-  hist_gradient_boosting        0.8194     2.2s     8.3s     2355  <- retenu
-  Test interne du modèle retenu : score 0.8597  (accuracy=0.8599, balanced_accuracy=0.8596, f1_macro=0.8596)
-  fit total : 9.9 s
+  modèle                                                                 score valid    durée  estimée   lignes
+  logistic_regression                                                         0.5562     0.1s     0.3s     2355
+  random_forest                                                               0.7388     5.3s     4.9s     2355
+  hist_gradient_boosting                                                      0.8194     1.8s     8.3s     2355
+  hist_gradient_boosting (optuna #0)                                          0.8150     4.4s    15.9s     2355
+  hist_gradient_boosting (optuna #1)                                          0.8344     5.9s     6.7s     2355  <- retenu
+  ensemble(hist_gradient_boosting + random_forest)                            0.8301     0.0s     0.0s     2355
+  ensemble(hist_gradient_boosting + random_forest + logistic_regression)      0.7684     0.0s     0.0s     2355
+  Test interne du modèle retenu : score 0.8630  (accuracy=0.8631, balanced_accuracy=0.8630, f1_macro=0.8630)
+  fit total : 22.3 s
+
+============================================================
+RÉSUMÉ (modèle retenu par jeu)
+  data_E   binary               hist_gradient_boosting (optuna #1) valid=0.8344 test=0.8630
 ```
 
-**Comment lire ces colonnes :**
+### Étape 8 – Lire les métriques
+
+**Les lignes du tableau**, dans l'ordre où `fit` les produit :
+
+| Lignes | Phase |
+| --- | --- |
+| `logistic_regression`, `random_forest`, `hist_gradient_boosting` | phase 1 : chaque modèle avec ses réglages par défaut |
+| `... (optuna #N)` | phase 2 : l'essai n° N d'Optuna sur l'un des 2 meilleurs modèles |
+| `ensemble(... + ...)` | phase 3 : moyenne des 2 ou 3 meilleurs modèles (durée 0 : noté sans réentraîner) |
+| `<- retenu` | le gagnant, réentraîné ensuite sur train + valid si le budget le permet |
+
+**Les colonnes :**
 
 | Colonne | Signification |
 | --- | --- |
-| `score valid` | score principal sur la **validation** : c'est lui qui sert à choisir le modèle |
+| `score valid` | score principal sur la **validation** (ou en validation croisée sur les petits jeux) : c'est lui qui sert à choisir le modèle |
 | `durée` / `estimée` | temps d'entraînement réel / estimé à l'avance par la formule de coût du modèle |
-| `lignes` | nombre de lignes du train utilisées (moins que le total si le modèle est trop coûteux pour le budget) |
-| `<- retenu` | le modèle gardé, puis réentraîné sur train + valid si le budget le permet |
-| `Test interne` | score sur une partie **jamais utilisée pour choisir** : c'est l'estimation honnête de la performance |
+| `lignes` | nombre de lignes utilisées (moins que le total si le modèle est trop coûteux pour le budget) |
+| `Test interne` | score du modèle retenu sur une partie **jamais utilisée pour choisir** : c'est l'estimation honnête de la performance attendue sur le leaderboard |
+| `fit total` | durée totale de `fit`, qui doit rester sous le budget |
 
 **Le score principal** (plus grand = meilleur) dépend de la tâche, voir [automl/metrics.py](automl/metrics.py) :
 
-| Tâche | Score principal | Métriques détaillées (`eval()`) |
+| Tâche | Score principal | Métriques détaillées |
 | --- | --- | --- |
 | binaire, multiclasse | moyenne de l'accuracy et du F1 macro | accuracy, balanced_accuracy, f1_macro |
 | multi-label | moyenne du F1 macro et de l'accuracy par label | subset_accuracy, label_accuracy, f1_macro |
 | régression | R² | r2, rmse, mae |
 
-Pour **comparer avant / après** une modification (par exemple Optuna), enregistrez les deux CSV dans `benchmarks/` et comparez-les. Références : [benchmarks/step3_reference.csv](benchmarks/step3_reference.csv) (étape 3, avant la correction du budget), [benchmarks/step3_deterministic_budget.csv](benchmarks/step3_deterministic_budget.csv) (étape 3 corrigée), [benchmarks/step4_optuna_ensemble_60s.csv](benchmarks/step4_optuna_ensemble_60s.csv) et [benchmarks/step4_optuna_ensemble_300s.csv](benchmarks/step4_optuna_ensemble_300s.csv) (actuelles, avec Optuna et ensembling).
-
-### 4. Dans un notebook
+Les mêmes métriques s'obtiennent directement avec l'interface du sujet :
 
 ```python
 import automl
 
+automl.fit("dataset/data_E")   # sur Skinner : "/info/corpus/ChallengeMachineLearning/data_E"
+automl.eval()
+```
+
+```text
+[AutoML] Évaluation...
+  valid_score                  0.8344
+  valid_accuracy               0.8344
+  valid_balanced_accuracy      0.8343
+  valid_f1_macro               0.8344
+  test_score                   0.8630
+  test_accuracy                0.8631
+  test_balanced_accuracy       0.8630
+  test_f1_macro                0.8630
+  model                        hist_gradient_boosting (optuna #1)
+  validation                   simple
+```
+
+Les clés `valid_*` correspondent au score de choix, les clés `test_*` au test interne. `validation` indique `simple` ou `croisée (5 plis)`.
+
+Dans un notebook, on peut aussi explorer le détail :
+
+```python
 m = automl.AutoML().fit("../dataset/data_E")
-m.eval()            # métriques valid_* et test_*
 m.leaderboard       # une ligne par modèle essayé : model, rows, estimated_s, duration_s, score…
 m.profile.summary() # ce que l'inspection a détecté
 ```
 
 Les notebooks [04_steps_1_2_robustness.ipynb](notebooks/04_steps_1_2_robustness.ipynb) et [05_step3_models.ipynb](notebooks/05_step3_models.ipynb) présentent ces résultats sous forme de tableaux et de graphiques.
+
+### Étape 9 – Comparer avec les résultats précédents
+
+Après une modification du code (nouveau modèle, autres réglages…), relancez l'étape 7 avec `--csv`, puis comparez le nouveau CSV aux références de [benchmarks/](benchmarks/) obtenues **avec le même budget** :
+
+| Fichier | Contenu |
+| --- | --- |
+| [step3_reference.csv](benchmarks/step3_reference.csv) | étape 3, avant la correction du budget |
+| [step3_deterministic_budget.csv](benchmarks/step3_deterministic_budget.csv) | étape 3 corrigée (60 s) |
+| [step4_optuna_ensemble_60s.csv](benchmarks/step4_optuna_ensemble_60s.csv) | version actuelle, avec Optuna et ensembling (60 s) |
+| [step4_optuna_ensemble_300s.csv](benchmarks/step4_optuna_ensemble_300s.csv) | version actuelle (300 s) |
+
+Une modification n'est gardée que si le **test interne** (`selected_test_score`) progresse, si le budget reste respecté et si `pytest` reste entièrement vert.
+
+### Résumé des commandes
+
+```bash
+python -m pytest tests                                   # 1. rien n'est cassé ?           -> 30 passed
+python scripts/check_preprocessing.py --folder dataset   # 2. prétraitement sur nos jeux  -> 6/6 jeux OK
+python scripts/evaluate_models.py --budget 60 --csv benchmarks/mon_essai.csv   # 3. métriques de chaque modèle
+```
 
 ---
 
@@ -329,7 +439,7 @@ Résultat sur les 6 jeux (partie train) :
 `fit` enchaîne maintenant quatre phases ([automl/\_\_init\_\_.py](automl/__init__.py), [automl/models.py](automl/models.py), [automl/selection.py](automl/selection.py)) :
 
 | Phase | Ce qui se passe | Part du budget (coût estimé cumulé) |
-|---|---|---|
+| --- | --- | --- |
 | 1. Candidats | chaque modèle avec ses réglages par défaut | 45 % |
 | 2. Optuna | les 2 meilleurs modèles sont optimisés, au plus `AUTOML_N_TRIALS` essais au total | 65 % |
 | 3. Ensembling | moyenne des probabilités (ou des prédictions en régression) des 2 ou 3 meilleurs modèles différents ; gardée seulement si elle bat le meilleur modèle seul | aucun entraînement en plus |
@@ -345,7 +455,7 @@ Résultat sur les 6 jeux (partie train) :
 **Résultats** (2 cœurs, 20 essais Optuna ; [benchmarks/step4_optuna_ensemble_60s.csv](benchmarks/step4_optuna_ensemble_60s.csv) et [benchmarks/step4_optuna_ensemble_300s.csv](benchmarks/step4_optuna_ensemble_300s.csv)) :
 
 | Jeu | Étape 3, 60 s (valid / test) | Étape 4-5, 60 s (valid / test) | Étape 4-5, 300 s (valid / test) | Modèle retenu à 300 s | `fit` à 300 s |
-|---|---|---|---|---|---:|
+| --- | --- | --- | --- | --- | ---: |
 | `data_A` | 0,881 / 0,877 | 0,883 / 0,880 | **0,888 / 0,885** | ensemble (boosting + forêt + logistique) | 41 s |
 | `data_B` | 0,799 / 0,816 | 0,803 / 0,813 | 0,792 / **0,817** | boosting optimisé par Optuna (CV) | 99 s |
 | `data_C` | 0,942 / 0,926 | 0,935 / 0,927 | **0,954 / 0,945** | forêt sur toutes les lignes | 114 s |
@@ -354,6 +464,7 @@ Résultat sur les 6 jeux (partie train) :
 | `data_F` | 0,899 / 0,892 | 0,902 / 0,905 | **0,906 / 0,907** | ensemble (Naive Bayes + logistique) | 62 s |
 
 À lire avec prudence :
+
 - les scores « valid » ne se comparent pas directement d'une colonne à l'autre : à 300 s, `data_B`, `data_D` et `data_E` passent en validation croisée, dont le score est plus fiable (et souvent un peu plus bas) qu'une validation simple ;
 - le **test interne** est la meilleure mesure de la performance réelle : il progresse surtout sur `data_C` (+1,9 point) et `data_F` (+1,5 point) ;
 - à 60 s, sur `data_D`, Optuna améliore la validation mais pas le test : avec ~450 lignes de validation, il apprend en partie le hasard du découpage. La validation croisée, active à 300 s, limite ce problème ;
